@@ -123,6 +123,7 @@ model.summary()
 # W - F + P*2 / S +1 
 # $$
 import skimage as sk
+import skimage.viewer
 # SEGMENTATION
 model = Sequential()
 model.add(Conv2D(filters=6, kernel_size=(2, 2), strides=(2, 2), padding='same', input_shape=(32, 32, 3)))
