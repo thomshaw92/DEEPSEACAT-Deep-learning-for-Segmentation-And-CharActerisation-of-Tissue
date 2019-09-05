@@ -1,3 +1,3 @@
-# SeCaTiMaL
-Segment and Characterise Tissue with Machine Learning
+# DEEP SEA CAT
+Deep learning for Segmentation And CharActerisation of Tissue 
 
