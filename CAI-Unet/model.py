@@ -23,7 +23,7 @@ except ImportError:
     from keras.layers.merge import concatenate
 
 
-def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_learning_rate=0.00001, deconvolution=False, dilation_block = False,
+def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_learning_rate=0.00001, deconvolution=False, dilation_block = False, n_dil_block=1,
                   depth=4, n_base_filters=32, include_label_wise_dice_coefficients=False, metrics=dice_coefficient,
                   batch_normalization=False, activation_name="sigmoid"):
     """
@@ -49,7 +49,7 @@ def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_
     
     :param initial_learning_rate: Initial learning rate for the model. This will be decayed during training.
     
-    :param deconvolution: If set to True, will use transpose convolution(deconvolution) instead of up-sampling. This
+    :param deconvolution: If set to True, will use transpose convolution (deconvolution) instead of up-sampling. This
     increases the amount memory required during training.
     :return: Untrained 3D UNet Model
     """
@@ -72,15 +72,16 @@ def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_
             current_layer = layer2
             levels.append([layer1, layer2])
 
-    # add levels with up-convolution or up-sampling
+    # add levels with up-convolution (Transposed convolution) or up-sampling
     # Note, backwards iteration to hit correct layers to concatenate
     for layer_depth in range(depth-2, -1, -1):
         up_convolution = get_up_convolution(strided_conv_size=strided_conv_size, deconvolution=deconvolution,
                                             n_filters=current_layer._keras_shape[1])(current_layer)
-        # Implement Dilated_fusion_block here # 
+        # Dilated_fusion_block here # 
         # Currently only implemented at lowest level, modify for-loop here if wanted on multiple levels, should be permutable, just specify
         # >= depth - (depth-1) for all except top layer, and depth > depth-depth
-        if layer_depth == (depth-(depth-2)) and dilation_block:
+        ###################### FIX PROBLEM HERE, hunch that it has to do with initial forloop in line 77 ################
+        if layer_depth >= (depth-(n_dil_block+1)) and dilation_block:
             dil_out = create_dilated_fusion_block(input_layer=levels[layer_depth][1], n_filters=levels[layer_depth][1]._keras_shape[1], layer_depth=layer_depth, dilation_depth=3)
             concat = concatenate([up_convolution, dil_out], axis=1)
         else:
@@ -123,7 +124,10 @@ def create_convolution_block(input_layer, n_filters, batch_normalization=False, 
     :param padding:
     :return:
     """
-    layer = Conv3D(n_filters, kernel, padding=padding, strides=strides)(input_layer)
+    if strides!=(1,1,1):
+        layer = Conv3D(n_filters, kernel, padding=padding, kernel_initializer='he_normal', strides=strides, name='Strided_conv'+str(input_layer._keras_shape[1]))(input_layer)
+    else:
+        layer = Conv3D(n_filters, kernel, padding=padding, kernel_initializer='he_normal', strides=strides)(input_layer)
     if batch_normalization:
         layer = BatchNormalization(axis=1)(layer)
     elif instance_normalization:
@@ -157,7 +161,7 @@ def get_up_convolution(n_filters, strided_conv_size, kernel_size=(2, 2, 2), stri
                        deconvolution=False):
     if deconvolution:
         return Deconvolution3D(filters=n_filters, kernel_size=kernel_size,
-                               strides=strides)
+                               strides=strides, kernel_initializer='he_normal', name='DeConv'+str(n_filters))
     else:
         return UpSampling3D(size=strided_conv_size)
     
@@ -175,19 +179,20 @@ def create_dilated_fusion_block(input_layer, n_filters, layer_depth=2, dilation_
 
 # Consider SpatialDropout3D instead of Dropout, if performance is bad, especially good in early layers
 # Give input layer and outputs concatenated layer of two sets of two dil convs.
+# NOTE - Can be mdke neater with for loop
 def dilated_couple(input_layer, n_filters, layer_depth, dilation_rate=1, batch_normalization=False, kernel=(3, 3, 3), activation=None,
                              padding='same', strides=(1, 1, 1), instance_normalization=False, dropout = 0.0):
     # First conv has kernel (1,1,1) to reduce feature maps and thereby computational load
-    layer = dilated_conv(input_layer, n_filters, kernel = (1,1,1), padding=padding, strides=strides, dilation_rate=dilation_rate)
+    layer = dilated_conv(input_layer, n_filters, kernel = (1,1,1), padding=padding, strides=strides, dilation_rate=dilation_rate, name = str(layer_depth)+'dil_rate_'+str(dilation_rate)+'_'+str(n_filters)+'_1')
     # filters should be the same as base layer here
-    layer = dilated_conv(layer, n_filters//(2**layer_depth), kernel=kernel, padding=padding, strides=strides, dilation_rate=dilation_rate)
+    layer = dilated_conv(layer, n_filters//(2**2), kernel=kernel, padding=padding, strides=strides, dilation_rate=dilation_rate, name = str(layer_depth)+'dil_rate_'+str(dilation_rate)+'_'+str(n_filters//(2**2))+'_1')
     
     layer = Dropout(dropout)(layer)
     # First set of completed dilated convs
     concat = concatenate([layer, input_layer], axis=1)
     
-    layer = dilated_conv(concat, n_filters, kernel = (1,1,1), padding=padding, strides=strides, dilation_rate=dilation_rate)
-    layer = dilated_conv(layer, n_filters//(2**layer_depth), kernel=kernel, padding=padding, strides=strides, dilation_rate=dilation_rate)
+    layer = dilated_conv(concat, n_filters, kernel = (1,1,1), padding=padding, strides=strides, dilation_rate=dilation_rate, name = str(layer_depth)+'dil_rate_'+str(dilation_rate)+'_'+str(n_filters)+'_2')
+    layer = dilated_conv(layer, n_filters//(2**2), kernel=kernel, padding=padding, strides=strides, dilation_rate=dilation_rate, name = str(layer_depth)+'dil_rate_'+str(dilation_rate)+'_'+str(n_filters//(2**2))+'_2')
     
     layer = Dropout(dropout)(layer)
     # Final layer is concatenated output of first 2 dil convs and second set of 2 dil convs
@@ -196,9 +201,9 @@ def dilated_couple(input_layer, n_filters, layer_depth, dilation_rate=1, batch_n
 
 # Single dilated conv w. relu activation
    # Give input layer and outputs layer convoluted with dilated conv
-def dilated_conv(input_layer, n_filters, dilation_rate=1, batch_normalization=False, kernel=(3,3,3), activation=None,
+def dilated_conv(input_layer, n_filters, name='dilated_conv', dilation_rate=1, batch_normalization=False, kernel=(3,3,3), activation=None,
                              padding='same', strides=(1, 1, 1), instance_normalization=False, dropout = False):
-    layer = Conv3D(n_filters, kernel, padding=padding, strides=strides, dilation_rate=dilation_rate)(input_layer)
+    layer = Conv3D(n_filters, kernel, kernel_initializer='he_normal', padding=padding, strides=strides, dilation_rate=dilation_rate, name=name)(input_layer)
     if batch_normalization:
         layer = BatchNormalization(axis=1)(layer)
     elif instance_normalization:
