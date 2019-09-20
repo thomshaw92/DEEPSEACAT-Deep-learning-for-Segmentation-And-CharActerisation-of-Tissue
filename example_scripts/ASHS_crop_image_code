@@ -1,0 +1,75 @@
+
+# This function maps histogram-corrected whole-brain images into the 
+# reference space of the template. Parameters are the atlas directory
+# containing the input images, and the atlas directory
+function ashs_reslice_to_template()
+{
+  local ASHS_WORK=${1?}
+  local ATLAS=${2?}
+  local WANT=$ASHS_WORK/ants_t1_to_temp
+  local WFSL=$ASHS_WORK/flirt_t2_to_t1
+
+  # Subject files generated in this script
+  ashs_subj_vars $ASHS_WORK
+
+  # Apply the transformation to the masks
+  local side
+  for side in $SIDES; do
+
+    ashs_subj_side_vars $ASHS_WORK $side
+
+    # Only generate these targets if needed
+    if [[ $ASHS_SKIP && \
+          -f $SUBJ_SIDE_TSE_TO_CHUNKTEMP && \
+          -f $SUBJ_SIDE_TSE_TO_CHUNKTEMP_REGMASK && \
+          -f $SUBJ_SIDE_MPRAGE_TO_CHUNKTEMP && \
+          -f $SUBJ_SIDE_TSE_NATCHUNK ]]
+    then
+      echo "Skipping reslicing of data to template and native ROI"
+    else
+
+      # Define the reference space
+      REFSPACE=$ATLAS/template/refspace_${side}.nii.gz
+
+      # Map the TSE image to the template space
+      greedy -d 3 -rf $REFSPACE \
+        -rm $SUBJ_TSE $SUBJ_SIDE_TSE_TO_CHUNKTEMP \
+        -r $SUBJ_T2TEMP_TRAN
+
+      # Map the mprage image to the template space
+      greedy -d 3 -rf $REFSPACE \
+        -rm $SUBJ_MPRAGE $SUBJ_SIDE_MPRAGE_TO_CHUNKTEMP \
+        -r $SUBJ_T1TEMP_TRAN
+
+      # Create a custom mask for the ASHS_TSE image
+      c3d $SUBJ_SIDE_TSE_TO_CHUNKTEMP -verbose -pim r -thresh 0.001% inf 1 0 \
+        -erode 0 4x4x4 $REFSPACE -times -type uchar \
+        -o $SUBJ_SIDE_TSE_TO_CHUNKTEMP_REGMASK 
+
+      # Create a native-space chunk of the ASHS_TSE image 
+      greedy -d 3 -rf $SUBJ_TSE \
+        -rm $SUBJ_SIDE_TSE_TO_CHUNKTEMP_REGMASK $TMPDIR/natmask.nii.gz \
+        -r $SUBJ_T2TEMP_INVTRAN
+
+      # Notice that we pad a little in the z-direction. This is to make sure that 
+      # we get all the slices in the image, otherwise there will be problems with 
+      # the voting code.
+      c3d $TMPDIR/natmask.nii.gz -thresh 0.5 inf 1 0 -trim 0x0x2vox \
+        $SUBJ_TSE -reslice-identity -type short -o $SUBJ_SIDE_TSE_NATCHUNK
+
+    fi
+
+    # We also resample the segmentation (if it exists, i.e., training mode)
+    if [[ -f $ASHS_WORK/seg_${side}.nii.gz ]]; then
+      if [[ $ASHS_SKIP && -f $ASHS_WORK/tse_native_chunk_${side}_seg.nii.gz ]]
+      then
+        echo "Skipping reslicing the segmentation to native space"
+      else
+        c3d $ASHS_WORK/tse_native_chunk_${side}.nii.gz $ASHS_WORK/seg_${side}.nii.gz \
+          -int 0 -reslice-identity -type short \
+          -o $ASHS_WORK/tse_native_chunk_${side}_seg.nii.gz
+      fi
+    fi
+
+  done
+}
