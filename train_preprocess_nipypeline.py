@@ -76,12 +76,12 @@ selectfiles = Node(SelectFiles(templates, base_directory=experiment_dir), name='
 
 #step one is to resample the MPRAGE to the template image
 #1) the commandline is flirt -in mprage_chunk_right.nii.gz -ref right_template0.nii.gz -applyxfm -usesqform -applyisoxfm 0.35 -interp sinc -datatype float -out out.nii.gz (nipype handles this)
-#2) Then binarise the mprage
-# fslmaths (input) -bin (output)
-# 3) Cut the TSE and resample to template data.
-# fslmaths mprage_binarised -mul tse.nii output.nii
-# resample everything  else into that space and size too.
-#normalise all using ImageMaths 
+#2) resmpale the TSE to be the same as the mprage using flirt
+#flirt -in tse.nii.gz -ref mprage_to_chunktemp_left.nii.gz -applyxfm -usesqform -out tse_chunk_test.nii.gz
+
+#normalise all using c3d
+#c3d -histmatch to template
+
 #pad (not yet)
                                        
 wf.connect([(infosource, selectfiles, [('subject_id', 'subject_id')])])
@@ -95,10 +95,6 @@ fslmaths input.nii -bin out.nii
 ###
 fake_n = MapNode
 
-
-####FSLMATHS##
-m###ultiply TSE by synthetic
-###fslmaths tse.nii -mul synth.nii tse_chunk_correct_size.nii
 
 ###########
 ## flirt ##
@@ -117,32 +113,8 @@ wf.connect([(selectfiles, flirt_n_flair, [('t1w', 'out_file')])])
 ants_be_n = MapNode(BrainExtraction(dimension=3, brain_template='/data/fasttemp/uqtshaw/tomcat/data/derivatives/myelin_mapping/T_template.nii.gz', brain_probability_mask='/data/fasttemp/uqtshaw/tomcat/data/derivatives/myelin_mapping/T_template_BrainCerebellumProbabilityMask.nii.gz'),
 		name='ants_be_node', iterfield=['anatomical_image'])
 wf.connect([(selectfiles, ants_be_n, [('t1w', 'anatomical_image')])]) 
-############
-## antsCT ##
-############
-antsct_n = MapNode(CorticalThickness(dimension=3, brain_template='/data/fastertemp/uqtshaw/ANTS/ants_ct_templates/T_template.nii.gz', brain_probability_mask='/data/fastertemp/uqtshaw/ANTS/ants_ct_templates/T_template_BrainCerebellumProbabilityMask.nii.gz', segmentation_priors=['/data/fastertemp/uqtshaw/ANTS/ants_ct_templates/Priors/priors1.nii.gz', '/data/fastertemp/uqtshaw/ANTS/ants_ct_templates/Priors/priors2.nii.gz', '/data/fastertemp/uqtshaw/ANTS/ants_ct_templates/Priors/priors3.nii.gz', '/data/fastertemp/uqtshaw/ANTS/ants_ct_templates/Priors/priors4.nii.gz', '/data/fastertemp/uqtshaw/ANTS/ants_ct_templates/Priors/priors5.nii.gz'], t1_registration_template='/data/fastertemp/uqtshaw/ANTS/ants_ct_templates/T_template_BrainCerebellum.nii.gz'),
-              name='ants_node', iterfield=['anatomical_image'])
-wf.connect([(selectfiles, antsct_n, [('t1w', 'anatomical_image')])]) 
-###############
-## mult_mask ##
-###############
-mult_mask_n_flair = MapNode(ImageMaths(op_string='-mul'),
-                      name="mult_mask_flair", iterfield=['in_file', 'in_file2'])
-wf.connect([(ants_be_n, mult_mask_n_flair, [('BrainExtractionMask', 'in_file')])])
-wf.connect([(flirt_n_flair, mult_mask_n_flair, [('out_file', 'in_file2')])])
-mult_mask_n_space = MapNode(ImageMaths(op_string='-mul'),
-                      name="mult_mask_space", iterfield=['in_file', 'in_file2'])
-wf.connect([(ants_be_n, mult_mask_n_space, [('BrainExtractionMask', 'in_file')])])
-wf.connect([(flirt_n_space, mult_mask_n_space, [('out_file', 'in_file2')])])
-###############
-## N4 the T2 ##
-###############
-n4_n_flair = MapNode(N4BiasFieldCorrection(dimension=3, bspline_fitting_distance=300, shrink_factor=3, n_iterations=[50,50,30,20]),
-                        name="n4_flair", iterfield=['input_image'])
-wf.connect([(mult_mask_n_flair, n4_n_flair, [('out_file', 'input_image')])])
-n4_n_space = MapNode(N4BiasFieldCorrection(dimension=3, bspline_fitting_distance=300, shrink_factor=3, n_iterations=[50,50,30,20]),
-                        name="n4_space", iterfield=['input_image'])
-wf.connect([(mult_mask_n_space, n4_n_space, [('out_file', 'input_image')])])
+
+
 
 
 ################
