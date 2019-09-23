@@ -24,9 +24,11 @@ from nipype.pipeline.engine import Workflow, Node, MapNode
  #config.set('logging', 'workflow_level', 'DEBUG')
  #config.set('logging', 'interface_level', 'DEBUG')
  #config.set('logging', 'utils_level', 'DEBUG')
+
+
 os.environ["FSLOUTPUTTYPE"] = "NIFTI_GZ"
 # work on scratch space only
-experiment_dir = '/ashs_atlas_umcutrecht_7t_20170810/train/'
+experiment_dir = '/ashs_atlas_umcutrecht_7t_20170810/' #we need to re-curate this data into a new directory with both atlasses.
 output_dir = '/RDM'
 working_dir = '/scratch'
 
@@ -78,43 +80,58 @@ selectfiles = Node(SelectFiles(templates, base_directory=experiment_dir), name='
 #1) the commandline is flirt -in mprage_chunk_right.nii.gz -ref right_template0.nii.gz -applyxfm -usesqform -applyisoxfm 0.35 -interp sinc -datatype float -out out.nii.gz (nipype handles this)
 #2) resmpale the TSE to be the same as the mprage using flirt
 #flirt -in tse.nii.gz -ref mprage_to_chunktemp_left.nii.gz -applyxfm -usesqform -out tse_chunk_test.nii.gz
-
+#3) do the same for the segmentation.
 #normalise all using c3d
 #c3d -histmatch to template
 
-#pad (not yet)
+#pad (not yet) and not needed.
                                        
 wf.connect([(infosource, selectfiles, [('subject_id', 'subject_id')])])
-###########
-## synth data 
+################
+## templates  ##
+################
+#left right
+#set up here
+
+##############
+## Step One ##
 ##############
 
-#resample an image to the correct size and res and then multiply by 0
-fslmaths input.nii -bin out.nii
+mprage_flirt_n = MapNode(fsl.FLIRT(uses_qform=True, apply_xfm=True, #applyisoxfm, interp sinc
+                  name='mprage_flirt_n', iterfield=['in_file'])
+wf.connect([(selectfiles, mprage_flirt_n, [('{side}_template_mprage_chunk', 'reference')])])
+wf.connect([(selectfiles, mprage_flirt_n, [('{side}_mprage_chunk', 'in_file')])])
+#wf.connect([(selectfiles, flirt_n, [('', 'out_file')])])
 
-###
-fake_n = MapNode
+############
+## Step 2 ##
+############
+tse_flirt_n = MapNode(fsl.FLIRT(uses_qform=True, apply_xfm=True, #applyisoxfm, interp sinc
+                  name='tse_flirt_n', iterfield=['in_file'])
+wf.connect([(selectfiles, mprage_flirt_n, [('out_file', 'reference')])]) #check that this works FIXME
+wf.connect([(selectfiles, tse_flirt_n, [('tse', 'in_file')])])
 
+##############
+##  Step 3  ##
+##############
 
-###########
-## flirt ##
-###########
+segmentation_n = MapNode(fsl.FLIRT(uses_qform=True, apply_xfm=True, #applyisoxfm, interp NEAREST
+                  name='segment_flirt_n', iterfield=['in_file'])
+wf.connect([(selectfiles, mprage_flirt_n, [('out_file', 'reference')])]) #check that this works FIXME
+wf.connect([(selectfiles, segmentation_n, [('seg', 'in_file')])])
 
-flirt_n = MapNode(fsl.FLIRT(uses_qform=True, apply_xfm=True
-                  name='flirt_n', iterfield=['in_file'])
-wf.connect([(selectfiles, flirt_n, [('tse', 'reference')])])
-wf.connect([(selectfiles, flirt_n_flair, [('flair', 'in_file')])])
-wf.connect([(selectfiles, flirt_n_flair, [('t1w', 'out_file')])])
+##############
+##  Step 4  ##
+##############
 
-
-####################
-## ants_brain_ext ##
-####################
-ants_be_n = MapNode(BrainExtraction(dimension=3, brain_template='/data/fasttemp/uqtshaw/tomcat/data/derivatives/myelin_mapping/T_template.nii.gz', brain_probability_mask='/data/fasttemp/uqtshaw/tomcat/data/derivatives/myelin_mapping/T_template_BrainCerebellumProbabilityMask.nii.gz'),
-		name='ants_be_node', iterfield=['anatomical_image'])
-wf.connect([(selectfiles, ants_be_n, [('t1w', 'anatomical_image')])]) 
-
-
+normalise_mprage_n = MapNode(c3d(histmatch=True,
+                  name='normalise_mprage_n', iterfield=['in_file'])
+wf.connect([(selectfiles, mprage_flirt_n, [('out_file', 'in_file')])]) #check that this works FIXME
+#include the reference mprage here
+normalise_tse_n = MapNode(c3d(histmatch=True,
+                  name='normalise_tse_n', iterfield=['in_file'])
+wf.connect([(selectfiles, tse_flirt_n, [('out_file', 'in_file')])])
+wf.connect #need to include the reference file here
 
 
 ################
@@ -122,13 +139,12 @@ wf.connect([(selectfiles, ants_be_n, [('t1w', 'anatomical_image')])])
 ################
 datasink = Node(DataSink(base_directory=experiment_dir, container=output_dir),
                 name='datasink')
-wf.connect([(mult_mask_n_space, datasink, [('out_file', 'spacemasked')])])
-wf.connect([(mult_mask_n_flair, datasink, [('out_file', 'flairmasked')])])
-wf.connect([(n4_n_space, datasink, [('output_image', 'spaceN4')])])
-wf.connect([(n4_n_flair, datasink, [('output_image', 'flairN4')])])
-wf.connect([(antsct_n, datasink, [('BrainSegmentation', 'brainsegmentation')])])
-wf.connect([(ants_be_n, datasink, [('BrainExtractionMask', 'mask_ants_t1w')])])
-wf.connect([(ants_be_n, datasink, [('BrainExtractionBrain', 'brain_ants_t1w')])])
+wf.connect([(mprage_flirt_n, datasink, [('out_file', 'mprage_resized')])])
+wf.connect([(tse_flirt_n, datasink, [('out_file', 'tse_resized')])])
+wf.connect([(segmentation_n, datasink, [('out_file', 'segmentation_resized')])])
+wf.connect([(normalise_mprage_n, datasink, [('output_image', 'mprage_resized_normalised')])])
+wf.connect([(normalise_tse_n, datasink, [('output_image', 'tse_resized_normalised')])])
+
 
 ###################
 ## Run the thing ##
@@ -136,6 +152,6 @@ wf.connect([(ants_be_n, datasink, [('BrainExtractionBrain', 'brain_ants_t1w')])]
 # # run as MultiProc
 wf.write_graph(graph2use='flat', format='png', simple_form=False)
 #wf.run('MultiProc', plugin_args={'n_procs': 20})
-
+#This is for running at CAI
 wf.run(plugin='SLURMGraph', plugin_args=dict(
     qsub_args='-N 1,-c 4,--partition=long,wks,all, --mem=16000'))
