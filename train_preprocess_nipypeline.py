@@ -7,8 +7,8 @@ from nipype.interfaces.base import (TraitedSpec,
 	File, 
 	traits
 )
-from nipype.interfaces.ants import N4BiasFieldCorrection
-from nipype.interfaces import fsl
+#from nipype.interfaces.ants import N4BiasFieldCorrection
+#from nipype.interfaces import fsl
 from nipype.interfaces.c3 import C3d
 from nipype.interfaces.fsl import flirt
 from nipype.interfaces.utility import IdentityInterface, Function
@@ -92,6 +92,8 @@ wf.connect([(infosource, selectfiles, [('subject_id', 'subject_id')])])
 ################
 #left right
 #set up here
+
+
 
 ##############
 ## Step One ##
