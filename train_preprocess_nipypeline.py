@@ -1,53 +1,43 @@
 #!/usr/bin/env python3
 from os.path import join as opj
 import os
-from nipype.interfaces import fsl
-from nipype.interfaces.base import (TraitedSpec, 
+from nipype.interfaces.base import (TraitedSpec,
 	CommandLineInputSpec, 
 	CommandLine, 
 	File, 
 	traits
 )
-#from nipype.interfaces.ants import N4BiasFieldCorrection
-#from nipype.interfaces.ants.segmentation import BrainExtraction
+from nipype.interfaces.ants import N4BiasFieldCorrection
+from nipype.interfaces import fsl
+from nipype.interfaces.c3 import C3d
 from nipype.interfaces.fsl import flirt
 from nipype.interfaces.utility import IdentityInterface, Function
 from nipype.interfaces.io import SelectFiles, DataSink
 from nipype.pipeline.engine import Workflow, Node, MapNode
-#from nipype.interfaces.ants.segmentation import CorticalThickness
 
 #test git
-# from nipype import config
-# config.enable_debug_mode()
-#
-# config.set('execution', 'stop_on_first_crash', 'true')
-# config.set('execution', 'remove_unnecessary_outputs', 'false')
-# config.set('execution', 'keep_inputs', 'true')
-# config.set('logging', 'workflow_level', 'DEBUG')
-# config.set('logging', 'interface_level', 'DEBUG')
-# config.set('logging', 'utils_level', 'DEBUG')
-
+ #from nipype import config
+ #config.enable_debug_mode()
+ #config.set('execution', 'stop_on_first_crash', 'true')
+ #config.set('execution', 'remove_unnecessary_outputs', 'false')
+ #config.set('execution', 'keep_inputs', 'true')
+ #config.set('logging', 'workflow_level', 'DEBUG')
+ #config.set('logging', 'interface_level', 'DEBUG')
+ #config.set('logging', 'utils_level', 'DEBUG')
 os.environ["FSLOUTPUTTYPE"] = "NIFTI_GZ"
-
 # work on scratch space only
 experiment_dir = '/ashs_atlas_umcutrecht_7t_20170810/train/'
 output_dir = '/RDM'
 working_dir = '/scratch'
 
 subject_list = ['train000' 'etc']
-#session_list = ['ses-01']
-
-iterable_list = [subject_list, session_list]
 
 wf = Workflow(name='train_preprocess_DL_hippo')
 wf.base_dir = opj(experiment_dir, working_dir)
 
 # create infosource to iterate over subject list
-infosource = Node(IdentityInterface(fields=['subject_id', 'session_id']), name="infosource")
-infosource.iterables = [('subject_id', subject_list)]
-
 infosource = Node(IdentityInterface(fields=['subject_id']), name="infosource")
-infosource.iterables = [('subject_id')]
+infosource.iterables = [('subject_id', subject_list)]
 
 templates = {'seg': '{subject_id}/seg_left.nii.gz',
              'mprage_chunk': '{subject_id}/anat/*T1w*.nii.gz',
@@ -55,7 +45,7 @@ templates = {'seg': '{subject_id}/seg_left.nii.gz',
 }
 selectfiles = Node(SelectFiles(templates, base_directory=experiment_dir), name='selectfiles')
 
-#PLAN:# create a synthetic (fake) input image size and res of 176x144x128 and 0.35 mm iso
+#PLAN:# resample everything to resolution of 176x144x128 and 0.35 mm iso using C3d
 # Cut the TSE first(mul MP2RAGE) using flirt and resample to the synth data.
 # resample everything  else into that space and siz too.
 #normalise all using ImageMaths 
@@ -86,12 +76,6 @@ flirt_n = MapNode(fsl.FLIRT(uses_qform=True, apply_xfm=True
 wf.connect([(selectfiles, flirt_n, [('tse', 'reference')])])
 wf.connect([(selectfiles, flirt_n_flair, [('flair', 'in_file')])])
 wf.connect([(selectfiles, flirt_n_flair, [('t1w', 'out_file')])])
-
-
-
-
-
-
 
 
 ####################
