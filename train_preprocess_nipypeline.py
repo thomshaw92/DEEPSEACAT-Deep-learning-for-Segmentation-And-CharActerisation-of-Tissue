@@ -45,9 +45,33 @@ templates = {'seg': '{subject_id}/seg_left.nii.gz',
 }
 selectfiles = Node(SelectFiles(templates, base_directory=experiment_dir), name='selectfiles')
 
-#PLAN:# resample everything to resolution of 176x144x128 and 0.35 mm iso using C3d
-# Cut the TSE first(mul MP2RAGE) using flirt and resample to the synth data.
-# resample everything  else into that space and siz too.
+#PLAN:# resample everything to resolution of 176x144x128 and 0.35 mm iso
+#Pre-preprocessing
+#I am creating a synthetic (template) dataset that we can register every participant to.
+#This will have the average intensity profile and correct resolution/dimensions.
+#command line is
+# c3d mprage_to_chunktemp_left.nii.gz -type float -resample 176x144x128 -interpolation sinc -o mprage_left_resample_test.nii.gz
+# c3d mprage_left_resample_test.nii.gz -type float -resample-mm 0.35x0.35x0.35mm -interpolation sinc -o mprage_left_resample_test_with_iso_sinc.nii.gz
+#AverageImages of all of these datasets A
+#for side in left right ; do
+#AverageImages 3 ${side}_mprage_average_DEEPSEACAT_initial_template.nii.gz 1 *${side}_mprage_left_resample_test_with_iso_sinc.nii.gz ;
+#done
+#This is the initial template for the template creation.
+#Then create the template using antsMultivariateTemplateConstruction2.sh (which will have the correct resolution and size)
+#antsMultivariateTemplateConstruction2.sh -d 3 -i 3 -k 2 -f 4x2x1 -s 2x1x0vox -q 30x20x4 -t SyN \
+# -z left_mprage_average_DEEPSEACAT_initial_template.nii.gz -z right_tse_average_DEEPSEACAT_initial_template.nii.gz -m MI -c 5 -o right_ right_template_input.csv
+
+#where right_templateInput.csv contains
+
+#subjectA_t1chunk.nii.gz,subjectA_t2chunk.nii.gz
+#subjectB_t1chunk.nii.gz,subjectB_t2chunk.nii.gz th
+
+###NIPYPELINE STARTS HERE
+#once we have these templates, we can use flirt (FSL) to resample our input data to the template images (MPRAGE and TSE chunks)
+
+#step one is to resample the MPRAGE by itself to the template image
+# Cut the TSE first(mul MP2RAGE) using flirt and resample to the template data.
+# resample everything  else into that space and size too.
 #normalise all using ImageMaths 
 #pad (not yet)
                                        
