@@ -45,32 +45,41 @@ templates = {'seg': '{subject_id}/seg_left.nii.gz',
 }
 selectfiles = Node(SelectFiles(templates, base_directory=experiment_dir), name='selectfiles')
 
-#PLAN:# resample everything to resolution of 176x144x128 and 0.35 mm iso
+#PLAN:# resample everything to 176x144x128 and 0.35 mm iso
 #Pre-preprocessing
-#I am creating a synthetic (template) dataset that we can register every participant to.
+#I am creating a synthetic (template) dataset that we can register/normalise every participant to.
 #This will have the average intensity profile and correct resolution/dimensions.
-#command line is
+# For completeness, i am doing it like this:
 # c3d mprage_to_chunktemp_left.nii.gz -type float -resample 176x144x128 -interpolation sinc -o mprage_left_resample_test.nii.gz
 # c3d mprage_left_resample_test.nii.gz -type float -resample-mm 0.35x0.35x0.35mm -interpolation sinc -o mprage_left_resample_test_with_iso_sinc.nii.gz
-#AverageImages of all of these datasets A
+#then, I average them all
+#AverageImages of all of these datasets:
 #for side in left right ; do
 #AverageImages 3 ${side}_mprage_average_DEEPSEACAT_initial_template.nii.gz 1 *${side}_mprage_left_resample_test_with_iso_sinc.nii.gz ;
 #done
-#This is the initial template for the template creation.
-#Then create the template using antsMultivariateTemplateConstruction2.sh (which will have the correct resolution and size)
+#This is the initial template for the template creation (needs to be done for left/right and for MPRAGE and TSE.
+#Then create the template using antsMultivariateTemplateConstruction2.sh (which will have the correct resolution and size, needs to be done for left and right)
 #antsMultivariateTemplateConstruction2.sh -d 3 -i 3 -k 2 -f 4x2x1 -s 2x1x0vox -q 30x20x4 -t SyN \
-# -z left_mprage_average_DEEPSEACAT_initial_template.nii.gz -z right_tse_average_DEEPSEACAT_initial_template.nii.gz -m MI -c 5 -o right_ right_template_input.csv
+# -z left_mprage_average_DEEPSEACAT_initial_template.nii.gz -z right_tse_average_DEEPSEACAT_initial_template.nii.gz \
+#  -m MI -c 5 -o right_ right_template_input.csv
 
 #where right_templateInput.csv contains
 
 #subjectA_t1chunk.nii.gz,subjectA_t2chunk.nii.gz
-#subjectB_t1chunk.nii.gz,subjectB_t2chunk.nii.gz th
+#subjectB_t1chunk.nii.gz,subjectB_t2chunk.nii.gz
+
+#then we are left with a template for left and right TSE and MPRAGE chunks.
+#we will need to include these in the atlases. Maybe we can create a new streamlined atlas with only the required files?
 
 ###NIPYPELINE STARTS HERE
 #once we have these templates, we can use flirt (FSL) to resample our input data to the template images (MPRAGE and TSE chunks)
 
-#step one is to resample the MPRAGE by itself to the template image
-# Cut the TSE first(mul MP2RAGE) using flirt and resample to the template data.
+#step one is to resample the MPRAGE to the template image
+#1) the commandline is flirt -in mprage_chunk_right.nii.gz -ref right_template0.nii.gz -applyxfm -usesqform -applyisoxfm 0.35 -interp sinc -datatype float -out out.nii.gz (nipype handles this)
+#2) Then binarise the mprage
+# fslmaths (input) -bin (output)
+# 3) Cut the TSE and resample to template data.
+# fslmaths mprage_binarised -mul tse.nii output.nii
 # resample everything  else into that space and size too.
 #normalise all using ImageMaths 
 #pad (not yet)
