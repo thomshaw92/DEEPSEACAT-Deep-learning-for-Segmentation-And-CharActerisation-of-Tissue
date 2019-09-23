@@ -125,29 +125,12 @@ wf.connect([(antsct_n, datasink, [('BrainSegmentation', 'brainsegmentation')])])
 wf.connect([(ants_be_n, datasink, [('BrainExtractionMask', 'mask_ants_t1w')])])
 wf.connect([(ants_be_n, datasink, [('BrainExtractionBrain', 'brain_ants_t1w')])])
 
+###################
+## Run the thing ##
+###################
 # # run as MultiProc
 wf.write_graph(graph2use='flat', format='png', simple_form=False)
-
-
 #wf.run('MultiProc', plugin_args={'n_procs': 20})
 
 wf.run(plugin='SLURMGraph', plugin_args=dict(
     qsub_args='-N 1,-c 4,--partition=long,wks,all, --mem=16000'))
-
-
-#robex for future ref
-class RobexInputSpec(CommandLineInputSpec):
-    in_file = File(desc = "t1w", exists = True,
-         mandatory = True, position = 0, argstr="%s")
-    out_file = File(desc = "Output volume", position = 1, argstr="%s", name_source=['in_file'],
-                        hash_files=False, name_template='%s_brain', keep_extension=True)
-    out_mask = File(desc = "Output mask", position = 2, argstr="%s", name_source=['in_file'],
-                        hash_files=False, name_template='%s_brainmask', keep_extension=True)
-    seed = traits.Int(desc = "seed for random number generator", position = 3, argstr = "%i")
-class RobexOutputSpec(TraitedSpec):
-    out_file = File(desc = "Output volume", exists = True)
-    out_mask = File(desc = "Output mask", exists = True)
-class RobexTask(CommandLine):
-    input_spec = RobexInputSpec
-    output_spec = RobexOutputSpec
-    _cmd = 'runROBEX.sh'
