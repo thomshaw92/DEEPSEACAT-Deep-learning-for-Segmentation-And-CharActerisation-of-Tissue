@@ -32,20 +32,47 @@ experiment_dir = '/ashs_atlas_umcutrecht_7t_20170810/' #we need to re-curate thi
 output_dir = '/RDM'
 working_dir = '/scratch'
 
-subject_list = ['train000' 'etc']
 
-wf = Workflow(name='train_preprocess_DL_hippo')
-wf.base_dir = opj(experiment_dir, working_dir)
 
-# create infosource to iterate over subject list
-infosource = Node(IdentityInterface(fields=['subject_id']), name="infosource")
-infosource.iterables = [('subject_id', subject_list)]
+dataset = ['magdeburg', 'umcutrecht']
+side = ['left', 'right']
+subject_list = []
+for i in range(35):
+    if i < 10:
+        subject_list.append('train00' + str(i))
+    else:
+        subject_list.append('train0' + str(i))
 
-templates = {'seg': '{subject_id}/seg_left.nii.gz',
-             'mprage_chunk': '{subject_id}/anat/*T1w*.nii.gz',
-             'tse': '{subject_id}/anat/.nii.gz',
+iterable_list = [dataset, subject_list, side]
+
+wf = Workflow(name='train_preprocess_DL_hippo') 
+wf.base_dir = os.path.join(experiment_dir, 'out_preproces')
+
+# create infosource to iterate over iterables
+infosource = Node(IdentityInterface(fields=['dataset', 'subject_list', 'side']), name="infosource")
+infosource.iterables = [('dataset', iterable_list[0]),('subject_list', iterable_list[1][0:26]), ('side', iterable_list[2])]
+
+
+templates = {'seg_whole-image':  'ashs_atlas_{dataset}/train/{subject_list}/seg_{side}.nii.gz',
+             'mprage_chunk':     'ashs_atlas_{dataset}/train/{subject_list}/mprage_to_chunktemp_{side}.nii.gz',
+             'tse_whole-image':  'ashs_atlas_{dataset}/train/{subject_list}/tse.nii.gz',
 }
+
+
 selectfiles = Node(SelectFiles(templates, base_directory=experiment_dir), name='selectfiles')
+
+
+wf.connect([(infosource, selectfiles, 
+             [
+              ('dataset', 'dataset'), 
+              ('subject_list', 'subject_list'), 
+              ('side', 'side')
+             ]
+            )
+           ]
+          )
+
+
 
 #PLAN:# resample everything to 176x144x128 and 0.35 mm iso
 #Pre-preprocessing
@@ -86,13 +113,16 @@ selectfiles = Node(SelectFiles(templates, base_directory=experiment_dir), name='
 
 #pad (not yet) and not needed.
                                        
-wf.connect([(infosource, selectfiles, [('subject_id', 'subject_id')])])
+    
+
 ################
 ## templates  ##
 ################
 #left right
-#set up here
+#set up here    
 
+    
+    
 
 
 ##############
