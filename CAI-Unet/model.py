@@ -10,7 +10,7 @@ mail: dlund13@student.aau.dk - Danielramsing@gmail.com
 import numpy as np
 from keras import backend as K
 from keras.engine import Input, Model
-from keras.layers import Conv3D, UpSampling3D, Activation, BatchNormalization, PReLU, Deconvolution3D, Dropout
+from keras.layers import Conv3D, UpSampling3D, Activation, BatchNormalization, PReLU, Deconvolution3D, Dropout, add
 from keras.optimizers import Adam
 
 from Metrics import dice_coefficient_loss, get_label_dice_coefficient_function, dice_coefficient
@@ -23,8 +23,9 @@ except ImportError:
     from keras.layers.merge import concatenate
 
 
-def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_learning_rate=0.00001, deconvolution=False, dilation_block = False, n_dil_block=1,
-                  depth=4, n_base_filters=32, include_label_wise_dice_coefficients=False, metrics=dice_coefficient,
+def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_learning_rate=0.00001, deconvolution=False, 
+                  dilation_block = False, n_dil_block=1, residual=False, depth=4, n_base_filters=32, 
+                  include_label_wise_dice_coefficients=False, metrics=dice_coefficient,
                   batch_normalization=False, activation_name="sigmoid"):
     """
     Builds the 3D UNet Keras model.f
@@ -61,15 +62,27 @@ def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_
     for layer_depth in range(depth):
         layer1 = create_convolution_block(input_layer=current_layer, n_filters=n_base_filters*(2**layer_depth),
                                           batch_normalization=batch_normalization)
-        layer2 = create_convolution_block(input_layer=layer1, n_filters=n_base_filters*(2**layer_depth),
+        if residual and layer_depth>0:
+            layer2 = create_convolution_block(input_layer=layer1, n_filters=n_base_filters*(2**layer_depth),
+                                          batch_normalization=batch_normalization, act_man = True)
+            layer2 = add([layer2, current_layer])
+            layer2 = Activation('relu')(layer2)
+        else:
+            layer2 = create_convolution_block(input_layer=layer1, n_filters=n_base_filters*(2**layer_depth),
                                           batch_normalization=batch_normalization)
+            
         if layer_depth < depth - 1:
             # Create pooling layer --> replaced with strided convolution strides = (2,2,2)
             current_layer = create_convolution_block(input_layer=layer2, n_filters=n_base_filters*(2**layer_depth),
-                                          batch_normalization=batch_normalization, strides=strided_conv_size) #                               MaxPooling3D(pool_size=pool_size)(layer2)
+                                          batch_normalization=batch_normalization, strides=strided_conv_size) #MaxPooling3D(pool_size=pool_size)(layer2)
+            
             levels.append([layer1, layer2, current_layer])
         else:
-            current_layer = layer2
+            if residual:
+                layer2 = add([layer2, current_layer])
+            else:
+                current_layer = layer2
+            
             levels.append([layer1, layer2])
 
     # add levels with up-convolution (Transposed convolution) or up-sampling
@@ -80,7 +93,6 @@ def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_
         # Dilated_fusion_block here # 
         # Currently only implemented at lowest level, modify for-loop here if wanted on multiple levels, should be permutable, just specify
         # >= depth - (depth-1) for all except top layer, and depth > depth-depth
-        ###################### FIX PROBLEM HERE, hunch that it has to do with initial forloop in line 77 ################
         if layer_depth >= (depth-(n_dil_block+1)) and dilation_block:
             dil_out = create_dilated_fusion_block(input_layer=levels[layer_depth][1], n_filters=levels[layer_depth][1]._keras_shape[1], layer_depth=layer_depth, dilation_depth=3)
             concat = concatenate([up_convolution, dil_out], axis=1)
@@ -93,6 +105,8 @@ def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_
         current_layer = create_convolution_block(n_filters=levels[layer_depth][1]._keras_shape[1],
                                                  input_layer=current_layer,
                                                  batch_normalization=batch_normalization)
+        if residual:
+            current_layer = add([current_layer, concat])
 
     final_convolution = Conv3D(n_labels, (1, 1, 1))(current_layer)
     act = Activation(activation_name)(final_convolution)
@@ -113,7 +127,7 @@ def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_
 
 
 def create_convolution_block(input_layer, n_filters, batch_normalization=False, kernel=(3, 3, 3), activation=None,
-                             padding='same', strides=(1, 1, 1), instance_normalization=False):
+                             padding='same', strides=(1, 1, 1), instance_normalization=False, act_man = False):
     """
     :param strides:
     :param input_layer:
@@ -137,8 +151,10 @@ def create_convolution_block(input_layer, n_filters, batch_normalization=False, 
             raise ImportError("Install keras_contrib in order to use instance normalization."
                               "\nTry: pip install git+https://www.github.com/farizrahman4u/keras-contrib.git")
         layer = InstanceNormalization(axis=1)(layer)
-    if activation is None:
+    if activation is None and act_man is False:
         return Activation('relu')(layer)
+    elif act_man is True:
+        return layer
     else:
         return activation()(layer)
 

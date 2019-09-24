@@ -29,7 +29,8 @@ if "patch_shape" in config and config["patch_shape"] is not None:       # Determ
 else:
     config["input_shape"] = tuple([config["nb_channels"]] + list(config["image_shape"]))
 config["dilation_block"] = True
-config["n_dil_block"]       = 3             # Must be at least 1 lower than depth
+config["n_dil_block"]       = 1             # Must be at least 1 lower than depth
+config["residual"]          = True
 config["truth_channel"] = config["nb_channels"]
 config["deconvolution"] = True          # if False, will use upsampling instead of deconvolution
 config["n_base_filters"] = 64
@@ -84,5 +85,6 @@ model = unet_model_3d(input_shape = config["input_shape"],
                       n_dil_block = config["n_dil_block"],
                       initial_learning_rate = config["initial_learning_rate"],
                       deconvolution = config["deconvolution"],
+                      residual = config["residual"],
                       n_base_filters = config["n_base_filters"])
 
