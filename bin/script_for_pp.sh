@@ -55,11 +55,10 @@ for side in left right ; do
 					     -m CC \
 					     -c 5 \
 					     -o ${side}_ ${workdir}/${side}_template_input.csv 
+	cd ${workdir}
+	cp ${workdir}/${side}_template/${side}_template0.nii.gz ${workdir}/${side}_tse_template_resampled-0.35mmIso_padded_176x144x128.nii.gz
+	cp ${workdir}/${side}_template/${side}_template1.nii.gz ${workdir}/${side}_mprage_template_resampled-0.35mmIso_padded_176x144x128.nii.gz
 done
-cd ${workdir}
-cp ${workdir}/${side}_template/${side}_template0.nii.gz ${workdir}/${side}_tse_template_resampled-0.35mmIso_padded_176x144x128.nii.gz
-cp ${workdir}/${side}_template/${side}_template1.nii.gz ${workdir}/${side}_mprage_template_resampled-0.35mmIso_padded_176x144x128.nii.gz
-
 
 #Rescale intensities between -1 and 1
 for seg in mprage tse ; do
