@@ -8,9 +8,8 @@ from nipype.interfaces.base import (TraitedSpec,
 	traits
 )
 #from nipype.interfaces.ants import N4BiasFieldCorrection
-#from nipype.interfaces import fsl
 from nipype.interfaces.c3 import C3d
-from nipype.interfaces.fsl import flirt
+from nipype.interfaces.fsl.preprocess import FLIRT
 from nipype.interfaces.utility import IdentityInterface, Function
 from nipype.interfaces.io import SelectFiles, DataSink
 from nipype.pipeline.engine import Workflow, Node, MapNode
@@ -28,14 +27,21 @@ from nipype.pipeline.engine import Workflow, Node, MapNode
 
 os.environ["FSLOUTPUTTYPE"] = "NIFTI_GZ"
 # work on scratch space only
-experiment_dir = '/ashs_atlas_umcutrecht_7t_20170810/' #we need to re-curate this data into a new directory with both atlasses.
+experiment_dir = '/afm01/Q1/Q1219/data/' 
 output_dir = '/RDM'
 working_dir = '/scratch'
 
 
+################
+## templates  ##
+################
+#left right
+#dataset
+#set up here  
 
 dataset = ['magdeburg', 'umcutrecht']
 side = ['left', 'right']
+
 subject_list = []
 for i in range(35):
     if i < 10:
@@ -44,6 +50,7 @@ for i in range(35):
         subject_list.append('train0' + str(i))
 
 iterable_list = [dataset, subject_list, side]
+#iterable_list = [dataset, side]
 
 wf = Workflow(name='train_preprocess_DL_hippo') 
 wf.base_dir = os.path.join(experiment_dir, 'out_preproces')
@@ -51,16 +58,19 @@ wf.base_dir = os.path.join(experiment_dir, 'out_preproces')
 # create infosource to iterate over iterables
 infosource = Node(IdentityInterface(fields=['dataset', 'subject_list', 'side']), name="infosource")
 infosource.iterables = [('dataset', iterable_list[0]),('subject_list', iterable_list[1][0:26]), ('side', iterable_list[2])]
-
+#infosource = Node(IdentityInterface(fields=['dataset', 'side']), name="infosource")
+#infosource.iterables = [('dataset', iterable_list[0]), ('side', iterable_list[1])]
 
 templates = {'seg_whole-image':  'ashs_atlas_{dataset}/train/{subject_list}/seg_{side}.nii.gz',
              'mprage_chunk':     'ashs_atlas_{dataset}/train/{subject_list}/mprage_to_chunktemp_{side}.nii.gz',
-             'tse_whole-image':  'ashs_atlas_{dataset}/train/{subject_list}/tse.nii.gz',
-}
+             'tse_whole-image':  'ashs_atlas_{dataset}/train/{subject_list}/tse.nii.gz'}
+
+#templates = {'seg_whole-image':  'ashs_atlas_{dataset}/train/train*/seg_{side}.nii.gz',
+#             'mprage_chunk':     'ashs_atlas_{dataset}/train/train*/mprage_to_chunktemp_{side}.nii.gz',
+#             'tse_whole-image':  'ashs_atlas_{dataset}/train/train*/tse.nii.gz'}
 
 
 selectfiles = Node(SelectFiles(templates, base_directory=experiment_dir), name='selectfiles')
-
 
 wf.connect([(infosource, selectfiles, 
              [
@@ -71,6 +81,8 @@ wf.connect([(infosource, selectfiles,
             )
            ]
           )
+
+
 
 
 
@@ -100,55 +112,60 @@ wf.connect([(infosource, selectfiles,
 #then we are left with a template for left and right TSE and MPRAGE chunks.
 #we will need to include these in the atlases. Maybe we can create a new streamlined atlas with only the required files?
 
+    
+    
 ###NIPYPELINE STARTS HERE
 #once we have these templates, we can use flirt (FSL) to resample our input data to the template images (MPRAGE and TSE chunks)
 
-#step one is to resample the MPRAGE to the template image
-#1) the commandline is flirt -in mprage_chunk_right.nii.gz -ref right_template0.nii.gz -applyxfm -usesqform -applyisoxfm 0.35 -interp sinc -datatype float -out out.nii.gz (nipype handles this)
+#1) resample the MPRAGE to the template image
+#the commandline is flirt -in mprage_chunk_right.nii.gz -ref right_template0.nii.gz -applyxfm -usesqform -applyisoxfm 0.35 -interp sinc -datatype float -out out.nii.gz (nipype handles this)
 #2) resmpale the TSE to be the same as the mprage using flirt
 #flirt -in tse.nii.gz -ref mprage_to_chunktemp_left.nii.gz -applyxfm -usesqform -out tse_chunk_test.nii.gz
 #3) do the same for the segmentation.
-#normalise all using c3d
+#4)normalise all using c3d
 #c3d -histmatch to template
 
 #pad (not yet) and not needed.
-                                       
-    
+                                      
 
-################
-## templates  ##
-################
-#left right
-#set up here    
+######################
+    ## Step 1 ##
+  #Resample MPRAGE#
+#####################
 
-    
-    
+mprage_flirt_n = MapNode(FLIRT(uses_qform=True, apply_xfm=True, applyisoxfm=0.35, interp='sinc', datatype='float'),
+                         name='mprage_flirt_n', iterfield=['in_file']) # iterfield forventer et input som er en liste med inputnavne og ikke kun et navn, vi skal altsaa have en liste der indeholder alle mprage billeder for begge datasaet og begge sider
+wf.connect([(selectfiles, mprage_flirt_n, [('mprage_to_chunktemp_{side}.nii','template.nii')])]) #Skriv navnet paa in_file (inputlisten) og referencebilledet (templaten)
 
 
-##############
-## Step One ##
-##############
 
-mprage_flirt_n = MapNode(fsl.FLIRT(uses_qform=True, apply_xfm=True, #applyisoxfm, interp sinc
-                  name='mprage_flirt_n', iterfield=['in_file'])
-wf.connect([(selectfiles, mprage_flirt_n, [('{side}_template_mprage_chunk', 'reference')])])
-wf.connect([(selectfiles, mprage_flirt_n, [('{side}_mprage_chunk', 'in_file')])])
+
+wf.connect([(selectfiles, mprage_flirt_n, [('{side}_template_mprage_chunk', 'reference')])])train*
+#wf.connect([(selectfiles, mprage_flirt_n, [('{side}_mprage_chunk', 'in_file')])])
+wf.connect([(selectfiles, mprage_flirt_n, [('mprage_to_chunktemp_{side}.nii.gz', 'in_file')])])
 #wf.connect([(selectfiles, flirt_n, [('', 'out_file')])])
 
-############
-## Step 2 ##
-############
-tse_flirt_n = MapNode(fsl.FLIRT(uses_qform=True, apply_xfm=True, #applyisoxfm, interp sinc
-                  name='tse_flirt_n', iterfield=['in_file'])
+
+
+
+
+
+#####################
+    ## Step 2 ##
+   #Resample TSE#
+#####################
+tse_flirt_n = MapNode(FLIRT(uses_qform=True, apply_xfm=True, applyisoxfm=0.35, interp='sinc', datatype='float'), 
+                      name='tse_flirt_n', iterfield=['in_file'])
 wf.connect([(selectfiles, mprage_flirt_n, [('out_file', 'reference')])]) #check that this works FIXME
 wf.connect([(selectfiles, tse_flirt_n, [('tse', 'in_file')])])
 
-##############
-##  Step 3  ##
-##############
+######################
+    ##  Step 3  ##
+    #Resample seg#
+######################
 
-segmentation_n = MapNode(fsl.FLIRT(uses_qform=True, apply_xfm=True, #applyisoxfm, interp NEAREST
-                  name='segment_flirt_n', iterfield=['in_file'])
+segmentation_n = MapNode(FLIRT(uses_qform=True, apply_xfm=True, applyisoxfm=0.35, interp='nearestneighbour', datatype='float'), 
+                         name='segment_flirt_n', iterfield=['in_file'])
 wf.connect([(selectfiles, mprage_flirt_n, [('out_file', 'reference')])]) #check that this works FIXME
 wf.connect([(selectfiles, segmentation_n, [('seg', 'in_file')])])
 
@@ -156,11 +173,11 @@ wf.connect([(selectfiles, segmentation_n, [('seg', 'in_file')])])
 ##  Step 4  ##
 ##############
 
-normalise_mprage_n = MapNode(c3d(histmatch=True,
+normalise_mprage_n = MapNode(C3d(histmatch=True),
                   name='normalise_mprage_n', iterfield=['in_file'])
 wf.connect([(selectfiles, mprage_flirt_n, [('out_file', 'in_file')])]) #check that this works FIXME
 #include the reference mprage here
-normalise_tse_n = MapNode(c3d(histmatch=True,
+normalise_tse_n = MapNode(C3d(histmatch=True),
                   name='normalise_tse_n', iterfield=['in_file'])
 wf.connect([(selectfiles, tse_flirt_n, [('out_file', 'in_file')])])
 wf.connect #need to include the reference file here
