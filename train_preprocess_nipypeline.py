@@ -1,43 +1,43 @@
 #!/usr/bin/env python3
+#DEEPSEACAT preprocessing pipeline in nipype
+#27/9/19
+
 from os.path import join as opj
 import os
 from nipype.interfaces.base import (TraitedSpec,
-	CommandLineInputSpec, 
-	CommandLine, 
-	File, 
-	traits
+	                            CommandLineInputSpec, 
+	                            CommandLine, 
+	                            File, 
+	                            traits
 )
-#from nipype.interfaces.ants import N4BiasFieldCorrection
+
 from nipype.interfaces.c3 import C3d
 from nipype.interfaces.fsl.preprocess import FLIRT
 from nipype.interfaces.utility import IdentityInterface, Function
 from nipype.interfaces.io import SelectFiles, DataSink
 from nipype.pipeline.engine import Workflow, Node, MapNode
+from nipype.interfaces.ants import RegistrationSynQuick
+from nipype.interfaces.ants import ApplyTransforms
+
 
 #test git
- #from nipype import config
- #config.enable_debug_mode()
- #config.set('execution', 'stop_on_first_crash', 'true')
- #config.set('execution', 'remove_unnecessary_outputs', 'false')
- #config.set('execution', 'keep_inputs', 'true')
- #config.set('logging', 'workflow_level', 'DEBUG')
- #config.set('logging', 'interface_level', 'DEBUG')
- #config.set('logging', 'utils_level', 'DEBUG')
-
+#from nipype import config
+#config.enable_debug_mode()
+#config.set('execution', 'stop_on_first_crash', 'true')
+#config.set('execution', 'remove_unnecessary_outputs', 'false')
+#config.set('execution', 'keep_inputs', 'true')
+#config.set('logging', 'workflow_level', 'DEBUG')
+#config.set('logging', 'interface_level', 'DEBUG')
+#config.set('logging', 'utils_level', 'DEBUG')
 
 os.environ["FSLOUTPUTTYPE"] = "NIFTI_GZ"
-# work on scratch space only
-experiment_dir = '/afm01/Q1/Q1219/data/' 
-output_dir = '/RDM'
-working_dir = '/scratch'
-
-
+###############
+# work on scratch space only - We will work on Awoonga because Wiener is GPUs only.
+experiment_dir = '/RDS/Q1219/data/' 
+output_dir = '/RDS/Q1219/data/preprocessed'
+working_dir = '/30days/${USER}/DEEPSEACAT_WORKINGDIR'
+github_dir = '~/DEEPSEACAT-Deep-learning-for-Segmentation-And-CharActerisation-of-Tissue/ '
 ################
-## templates  ##
-################
-#left right
-#dataset
-#set up here  
 
 dataset = ['magdeburg', 'umcutrecht']
 side = ['left', 'right']
@@ -53,116 +53,126 @@ iterable_list = [dataset, subject_list, side]
 #iterable_list = [dataset, side]
 
 wf = Workflow(name='train_preprocess_DL_hippo') 
-wf.base_dir = os.path.join(experiment_dir, 'out_preproces')
+wf.base_dir = os.path.join(experiment_dir, 'working_dir
+')
 
 # create infosource to iterate over iterables
 infosource = Node(IdentityInterface(fields=['dataset', 'subject_list', 'side']), name="infosource")
 infosource.iterables = [('dataset', iterable_list[0]),('subject_list', iterable_list[1][0:26]), ('side', iterable_list[2])]
+
+#i'm not so sure this will work now, we need to find a way of having all the subjects iterated over and the sides too.
+
+
 #infosource = Node(IdentityInterface(fields=['dataset', 'side']), name="infosource")
 #infosource.iterables = [('dataset', iterable_list[0]), ('side', iterable_list[1])]
 
-templates = {'seg_whole-image':  'ashs_atlas_{dataset}/train/{subject_list}/seg_{side}.nii.gz',
-             'mprage_chunk':     'ashs_atlas_{dataset}/train/{subject_list}/mprage_to_chunktemp_{side}.nii.gz',
-             'tse_whole-image':  'ashs_atlas_{dataset}/train/{subject_list}/tse.nii.gz'}
+
+#because we are doing different things with the datasets now i think we should make different templates for the tses (mprage is all the same):
+
+templates = {'umc_tse_native': 'ashs_atlas_umcutrecht_7t_20170810/train/{subject_list}/tse_native_chunk_{side}.nii.gz'
+             'umc_tse_whole': 'ashs_atlas_umcutrecht_7t_20170810/train/{subject_list}/tse.nii.gz'
+             'mag_tse_native': 'ashs_atlas_magdeburg_7t_20180416/train/{subject_list}/tse_native_chunk_{side}.nii.gz'
+             'mag_tse_whole': 'ashs_atlas_magdeburg_7t_20180416/train/{subject_list}/tse.nii.gz'
+             #seg
+             'umc_seg_native': 'ashs_atlas_umcutrecht_7t_20170810/train/{subject_list}/tse_native_chunk_{side}_seg.nii.gz'
+             'mag_seg_native': 'ashs_atlas_magdeburg_7t_20180416/train/{subject_list}/tse_native_chunk_{side}_seg.nii.gz'
+             #mprage
+             'mprage_chunk': 'ashs_atlas_{dataset}/train/{subject_list}/mprage_to_chunktemp_{side}.nii.gz'}
+
+bespoke_files = {'umc_tse_template' : 'lib/umc_tse_template.nii.gz'}    
+
+selectfiles = Node(SelectFiles(templates, base_directory=experiment_dir), name='selectfiles')
+selecttemplates = Node(SelectFiles(bespoke_files, base_dir=github_dir), name='selecttemplates')
+
+wf.connect([(infosource, selectfiles, [('subject_id', 'subject_id')])]) 
 
 #templates = {'seg_whole-image':  'ashs_atlas_{dataset}/train/train*/seg_{side}.nii.gz',
 #             'mprage_chunk':     'ashs_atlas_{dataset}/train/train*/mprage_to_chunktemp_{side}.nii.gz',
 #             'tse_whole-image':  'ashs_atlas_{dataset}/train/train*/tse.nii.gz'}
 
 
-selectfiles = Node(SelectFiles(templates, base_directory=experiment_dir), name='selectfiles')
+#mprage_flirt_n = MapNode(FLIRT(uses_qform=True, apply_xfm=True, applyisoxfm=0.35, interp='sinc', datatype='float'),
+#                         name='mprage_flirt_n', iterfield=['in_file']) # iterfield forventer et input som er en liste med inputnavne og ikke kun et navn, vi skal altsaa have en liste der indeholder alle mprage billeder for begge datasaet og begge sider
+#wf.connect([(selectfiles, mprage_flirt_n, [('mprage_to_chunktemp_{side}.nii','template.nii')])]) #Skriv navnet paa in_file (inputlisten) og referencebilledet (templaten)
 
-wf.connect([(infosource, selectfiles, 
-             [
-              ('dataset', 'dataset'), 
-              ('subject_list', 'subject_list'), 
-              ('side', 'side')
-             ]
-            )
-           ]
-          )
-
-
-
-
-
-#PLAN:# resample everything to 176x144x128 and 0.35 mm iso
-#Pre-preprocessing
-#I am creating a synthetic (template) dataset that we can register/normalise every participant to.
-#This will have the average intensity profile and correct resolution/dimensions.
-# For completeness, i am doing it like this:
-# c3d mprage_to_chunktemp_left.nii.gz -type float -resample 176x144x128 -interpolation sinc -o mprage_left_resample_test.nii.gz
-# c3d mprage_left_resample_test.nii.gz -type float -resample-mm 0.35x0.35x0.35mm -interpolation sinc -o mprage_left_resample_test_with_iso_sinc.nii.gz
-#then, I average them all
-#AverageImages of all of these datasets:
-#for side in left right ; do
-#AverageImages 3 ${side}_mprage_average_DEEPSEACAT_initial_template.nii.gz 1 *${side}_mprage_left_resample_test_with_iso_sinc.nii.gz ;
-#done
-#This is the initial template for the template creation (needs to be done for left/right and for MPRAGE and TSE.
-#Then create the template using antsMultivariateTemplateConstruction2.sh (which will have the correct resolution and size, needs to be done for left and right)
-#antsMultivariateTemplateConstruction2.sh -d 3 -i 3 -k 2 -f 4x2x1 -s 2x1x0vox -q 30x20x4 -t SyN \
-# -z left_mprage_average_DEEPSEACAT_initial_template.nii.gz -z right_tse_average_DEEPSEACAT_initial_template.nii.gz \
-#  -m MI -c 5 -o right_ right_template_input.csv
-
-#where right_templateInput.csv contains
-
-#subjectA_t1chunk.nii.gz,subjectA_t2chunk.nii.gz
-#subjectB_t1chunk.nii.gz,subjectB_t2chunk.nii.gz
-
-#then we are left with a template for left and right TSE and MPRAGE chunks.
-#we will need to include these in the atlases. Maybe we can create a new streamlined atlas with only the required files?
-
-    
-    
-###NIPYPELINE STARTS HERE
-#once we have these templates, we can use flirt (FSL) to resample our input data to the template images (MPRAGE and TSE chunks)
-
-#1) resample the MPRAGE to the template image
-#the commandline is flirt -in mprage_chunk_right.nii.gz -ref right_template0.nii.gz -applyxfm -usesqform -applyisoxfm 0.35 -interp sinc -datatype float -out out.nii.gz (nipype handles this)
-#2) resmpale the TSE to be the same as the mprage using flirt
-#flirt -in tse.nii.gz -ref mprage_to_chunktemp_left.nii.gz -applyxfm -usesqform -out tse_chunk_test.nii.gz
-#3) do the same for the segmentation.
-#4)normalise all using c3d
-#c3d -histmatch to template
-
-#pad (not yet) and not needed.
-                                      
-
-######################
-    ## Step 1 ##
-  #Resample MPRAGE#
-#####################
-
-mprage_flirt_n = MapNode(FLIRT(uses_qform=True, apply_xfm=True, applyisoxfm=0.35, interp='sinc', datatype='float'),
-                         name='mprage_flirt_n', iterfield=['in_file']) # iterfield forventer et input som er en liste med inputnavne og ikke kun et navn, vi skal altsaa have en liste der indeholder alle mprage billeder for begge datasaet og begge sider
-wf.connect([(selectfiles, mprage_flirt_n, [('mprage_to_chunktemp_{side}.nii','template.nii')])]) #Skriv navnet paa in_file (inputlisten) og referencebilledet (templaten)
-
-
-
-
-wf.connect([(selectfiles, mprage_flirt_n, [('{side}_template_mprage_chunk', 'reference')])])train*
+#wf.connect([(selectfiles, mprage_flirt_n, [('{side}_template_mprage_chunk', 'reference')])])train*
 #wf.connect([(selectfiles, mprage_flirt_n, [('{side}_mprage_chunk', 'in_file')])])
-wf.connect([(selectfiles, mprage_flirt_n, [('mprage_to_chunktemp_{side}.nii.gz', 'in_file')])])
+#wf.connect([(selectfiles, mprage_flirt_n, [('mprage_to_chunktemp_{side}.nii.gz', 'in_file')])])
 #wf.connect([(selectfiles, flirt_n, [('', 'out_file')])])
 
 
+############
+## Step 1 ##
+############
+#seeing as the UMC dataset is already close to isotropic, we will use it as our standard.
+#Native chunks for TSE contain the segmentation, so we will keep them in this space.
+#We need to change the whole tse to 0.35mm iso anyway to get the resolution consistent across all data
+
+umc_tse_resample_n = MapNode(C3d(interp = "Sinc", pix_type = 'float', args='resample-mm 0.35x0.35x0.35mm'),
+                             name='umc_tse_resample_n', iterfield=['in_file']) 
+wf.connect([(selectfiles, umc_tse_resample_n, [('umc_tse_whole','in_file')])])
+
+############
+## Step 2 ##
+############
+
+#But the chunks are different sizes, so we will resize them to the correct size.
+#pad the tse_native_chunk to the correct size, binarize, and resample
+
+umc_tse_pad_bin_n = MapNode(C3d(interp = "Sinc", pix_type = 'float', args='resample-mm 0.35x0.35x0.35mm', args='pad-to 176x144x128 0', args='-binarize'),
+                            name='umc_tse_pad_bin_n', iterfield=['in_file']) 
+wf.connect([(selectfiles, umc_tse_pad_bin_n, [('umc_tse_chunk','in_file')])])
+
+############
+## Step 3 ##
+############
+#then multiply the bin mask by the original TSE to get the same sized chunks across the dataset. (prolly have to -reslice identity first
+
+
+umc_tse_reslice_n =  MapNode(C3d(interp = "Sinc", pix_type = 'float', args='-reslice-identity'),
+                             name='umc_tse_reslice_n', iterfield=['in_file']) 
+wf.connect([(umc_tse_pad_bin_n, umc_tse_reslice_n, [('out_file','in_file')])])
+wf.connect([(selectfiles, umc_tse_resclice_n, [('umc_tse_whole','in_file')])])
+
+#then multiply
+umc_tse_mult_n =  MapNode(C3d(interp = "Sinc", pix_type = 'float', args='-multiply'),
+                          name='umc_tse_mult_n', iterfield=['in_file']) 
+wf.connect([(umc_tse_resclice_n, umc_tse_mult_n, [('out_file','in_file')])])
+wf.connect([(selectfiles, umc_tse_mult_n, [('umc_tse_whole','in_file')])])        
+
+############
+## Step 4 ##
+############
+# The Mag data needs to be resampled to the right resolution, but doing this willblow the the z direction out in terms of image size
+# So we register the TSEs of the magdeberg dataset to the template of the
+#UMC dataset rigidly.The template is in the github repo cause we had to make it first (see bash script).
+mag_register_n = MapNode(RegistrationSynQuick(transform_type = 'r', use_histogram_matching=True ), 
+                         name='mag_register_n', iterfield=['moving_image'])
+wf.connect([(selecttemplates, mag_register_n, [('umc_tse_template', 'fixed_image')])])
+wf.connect([(selectfiles, mag_register_n, [('mag_tse_whole', 'moving_image')])])
+
+############
+## Step 5 ##
+############
+#the mag data needs to have the same treatment as the umc data now.
+#First, take the transformation that we just computed and apply it to the tse_native_chunk
+
+mag_native_move_n = MapNode(ApplyTransforms(dimension = '3', interpolation = 'BSpline', 
+                                            name='mag_native_move_n', iterfield=['input_file'])
+                            wf.connect([(selectfiles, mag_native_move_n, [('mag_tse_native', 'input_file')])])
+                            wf.connect([(mag_register_n, mag_native_move_n, [('', 'transforms')])]) #need to figure out where the affine is from the previous step. Does it have a standard name?
+
+    
+######got up to here.
 
 
 
 
-#####################
-    ## Step 2 ##
-   #Resample TSE#
-#####################
-tse_flirt_n = MapNode(FLIRT(uses_qform=True, apply_xfm=True, applyisoxfm=0.35, interp='sinc', datatype='float'), 
-                      name='tse_flirt_n', iterfield=['in_file'])
-wf.connect([(selectfiles, mprage_flirt_n, [('out_file', 'reference')])]) #check that this works FIXME
-wf.connect([(selectfiles, tse_flirt_n, [('tse', 'in_file')])])
 
-######################
-    ##  Step 3  ##
-    #Resample seg#
-######################
+             ######################
+             ##  Step 3  ##
+             #Resample seg#
+             ######################
 
 segmentation_n = MapNode(FLIRT(uses_qform=True, apply_xfm=True, applyisoxfm=0.35, interp='nearestneighbour', datatype='float'), 
                          name='segment_flirt_n', iterfield=['in_file'])
@@ -174,11 +184,11 @@ wf.connect([(selectfiles, segmentation_n, [('seg', 'in_file')])])
 ##############
 
 normalise_mprage_n = MapNode(C3d(histmatch=True),
-                  name='normalise_mprage_n', iterfield=['in_file'])
+                             name='normalise_mprage_n', iterfield=['in_file'])
 wf.connect([(selectfiles, mprage_flirt_n, [('out_file', 'in_file')])]) #check that this works FIXME
 #include the reference mprage here
 normalise_tse_n = MapNode(C3d(histmatch=True),
-                  name='normalise_tse_n', iterfield=['in_file'])
+                          name='normalise_tse_n', iterfield=['in_file'])
 wf.connect([(selectfiles, tse_flirt_n, [('out_file', 'in_file')])])
 wf.connect #need to include the reference file here
 
