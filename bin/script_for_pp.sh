@@ -135,9 +135,9 @@ for side in left right ; do
 	-o ${umc_atlasdir}/train/train_${x}/tse_native_chunk_${side}_pad-176x144x128_bin.nii.gz
 
 
-    #then multiply by the original TSE to get the same sized chunks across the dataset. (prolly have to -copy-transform)
+    #then multiply by the original TSE to get the same sized chunks across the dataset. (prolly have to -copy-transform) #this code isn't implemented here but we need to do a reslice-identity step - see nipype. 
     c3d ${umc_atlasdir}/train/train_${x}/tse_native_chunk_${side}_pad-176x144x128_bin.nii.gz \
-	-times ${umc_atlasdir}/train/train_${x}/tse.nii.gz
+ ${umc_atlasdir}/train/train_${x}/tse.nii.gz	-times
 	-type float \
 	-interpolation sinc \
 	${umc_atlasdir}/train/train_${x}/tse_native_chunk_${side}_nopad-176x144x128.nii.gz
