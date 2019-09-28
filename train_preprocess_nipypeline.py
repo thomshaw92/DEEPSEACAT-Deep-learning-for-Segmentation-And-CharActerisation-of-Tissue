@@ -39,59 +39,66 @@ os.environ["FSLOUTPUTTYPE"] = "NIFTI_GZ"
 #github_dir = '~/DEEPSEACAT-Deep-learning-for-Segmentation-And-CharActerisation-of-Tissue/ '
 ################
 #setup for Workstations
+experiment_dir = '/data/fastertemp/uqtshaw/DEEPSEACAT_atlas/'
 #where all the atlases live
-experiment_dir = '/data/fastertemp/uqtshaw/'
-#the outdir
-output_dir = '/data/fastertemp/uqtshaw/DEEPSEACAT_atlas/'
-#intermediate files
-working_dir = '/data/fastertemp/uqtshaw/DEEPSEACAT_atlas/working_dir'
+data_dir = '/data/fastertemp/uqtshaw/'
 #files from github that need to be included in the distribution
-github_dir = '/data/fastertemp/uqtshaw/DEEPSEACAT_atlas/DEEPSEACAT-Deep-learning-for-Segmentation-And-CharActerisation-of-Tissue/'
+github_dir = '/data/fastertemp/uqtshaw/DEEPSEACAT_atlas/DEEPSEACAT-Deep-learning-for-Segmentation-And-CharActerisation-of-Tissue/lib/'
+###############
+#the outdir
+output_dir = 'output_dir'
+#working_dir name
+working_dir = 'workingdir_preprocessing'
+#other things to be set up
+dataset_list = ['magdeburg', 'umcutrecht']
+side_list = ['left', 'right']
+subject_list = ['train000','train001','train002']
 #####################
 
-#dataset = ['magdeburg', 'umcutrecht']
+wf = Workflow(name='train_preprocess_DL_hippo') 
+wf.base_dir = os.path.join(experiment_dir, 'working_dir')
 
-side_iterable = ['left', 'right']
-subject_list = ['train000','train001','train002']
+# create infosource to iterate over iterables
+infosource = Node(IdentityInterface(fields=['subject_id',
+                                            'side_id',
+                                            'dataset_id']),
+                  name="infosource")
+infosource.iterables = [('subject_id', subject_list),
+                        ('side_id', side_list),
+                        ('dataset_id', dataset_list)]
+
 #for i in range(35):
 #    if i < 10:
 #        subject_list.append('train00' + str(i))
 #    else:
 #        subject_list.append('train0' + str(i))
-
-iterable_list = [subject_list]
-wf = Workflow(name='train_preprocess_DL_hippo') 
-wf.base_dir = os.path.join(experiment_dir, 'working_dir')
-
-# create infosource to iterate over iterables
-infosource = Node(IdentityInterface(fields=['subject_id']), name="infosource")
-infosource.iterables = [('subject_id', subject_list[0][0:26])]
-
+#[0][0:26])
 #i'm not so sure this will work now, we need to find a way of having all the subjects iterated over and the sides too.
 #because this won't need to be iterated in every node, so we need to choose which nodes need to be iterated over for both left and right.
 
 #infosource = Node(IdentityInterface(fields=['dataset', 'side']), name="infosource")
 #infosource.iterables = [('dataset', iterable_list[0]), ('side', iterable_list[1])]
-
-
 #because we are doing different things with the datasets now i think we should make different templates for the tses (mprage is all the same):
 
-templates = {'umc_tse_native' : 'ashs_atlas_umcutrecht_7t_20170810/train/{subject_id}/tse_native_chunk_{side}.nii.gz',
+templates = {'umc_tse_native' : 'ashs_atlas_umcutrecht_7t_20170810/train/{subject_id}/tse_native_chunk_{side_id}.nii.gz',
              'umc_tse_whole' : 'ashs_atlas_umcutrecht_7t_20170810/train/{subject_id}/tse.nii.gz',
-             'mag_tse_native' : 'ashs_atlas_magdeburg_7t_20180416/train/{subject_id}/tse_native_chunk_{side}.nii.gz',
+             'mag_tse_native' : 'ashs_atlas_magdeburg_7t_20180416/train/{subject_id}/tse_native_chunk_{side_id}.nii.gz',
              'mag_tse_whole' : 'ashs_atlas_magdeburg_7t_20180416/train/{subject_id}/tse.nii.gz',
              #seg
-             'umc_seg_native' : 'ashs_atlas_umcutrecht_7t_20170810/train/{subject_id}/tse_native_chunk_{side}_seg.nii.gz',
-             'mag_seg_native' : 'ashs_atlas_magdeburg_7t_20180416/train/{subject_id}/tse_native_chunk_{side}_seg.nii.gz',
+             'umc_seg_native' : 'ashs_atlas_umcutrecht_7t_20170810/train/{subject_id}/tse_native_chunk_{side_id}_seg.nii.gz',
+             'mag_seg_native' : 'ashs_atlas_magdeburg_7t_20180416/train/{subject_id}/tse_native_chunk_{side_id}_seg.nii.gz',
              #mprage
-             'mprage_chunk' : 'ashs_atlas_{dataset}/train/{subject_id}/mprage_to_chunktemp_{side}.nii.gz'}
+             'mprage_chunk' : 'ashs_atlas_{dataset_id}*/train/{subject_id}/mprage_to_chunktemp_{side_id}.nii.gz'}
 
-bespoke_files = {'umc_tse_template' : 'lib/umc_tse_template.nii.gz'}    
+bespoke_files = {'umc_tse_template' : 'umc_tse_template.nii.gz'}    
 
-selectfiles = Node(SelectFiles(templates, base_directory=experiment_dir), name='selectfiles')
-selecttemplates = Node(SelectFiles(bespoke_files, base_dir=github_dir), name='selecttemplates')
+selectfiles = Node(SelectFiles(templates, base_directory=data_dir), name='selectfiles')
 
-wf.connect([(infosource, selectfiles, [('subject_id', 'subject_id')])]) 
+selecttemplates = Node(SelectFiles(bespoke_files, base_directory=github_dir), name='selecttemplates')
+
+wf.connect([(infosource, selectfiles, [('subject_id', 'subject_id'),
+                                       ('side_id', 'side_id'),
+                                       ('dataset_id', 'dataset_id')])]) 
 
 #templates = {'seg_whole-image':  'ashs_atlas_{dataset}/train/train*/seg_{side}.nii.gz',
 #             'mprage_chunk':     'ashs_atlas_{dataset}/train/train*/mprage_to_chunktemp_{side}.nii.gz',
@@ -136,16 +143,16 @@ wf.connect([(selectfiles, umc_tse_pad_bin_n, [('umc_tse_native','in_file')])])
 #then multiply the bin mask by the original TSE to get the same sized chunks across the dataset. (prolly have to -reslice identity first
 
 
-umc_tse_reslice_n =  MapNode(C3d(interp = "Sinc", pix_type = 'float', args = '-reslice-identity'),
-                             name='umc_tse_reslice_n', iterfield=['in_files']) 
-wf.connect([(umc_tse_pad_bin_n, umc_tse_reslice_n, [('out_files','in_files')])])
-#wf.connect([(selectfiles, umc_tse_reslice_n, [('umc_tse_whole','in_files')])])
+umc_tse_reslice_n =  Node(C3d(interp = "Sinc", pix_type = 'float', args = '-reslice-identity'),
+                             name='umc_tse_reslice_n')
+wf.connect([(umc_tse_pad_bin_n, umc_tse_reslice_n, [('out_files','in_file')])])
+wf.connect([(selectfiles, umc_tse_reslice_n, [('umc_tse_whole','in_file')])])
 
 #then multiply
-umc_tse_mult_n =  MapNode(C3d(interp = "Sinc", pix_type = 'float', args = '-multiply'),
-                          name='umc_tse_mult_n', iterfield=['in_files']) 
-wf.connect([(umc_tse_reslice_n, umc_tse_mult_n, [('out_files','in_files')])])
-#wf.connect([(selectfiles, umc_tse_mult_n, [('umc_tse_whole','in_files')])])        
+umc_tse_mult_n = Node(C3d(interp = "Sinc", pix_type = 'float', args = '-multiply'),
+                          name='umc_tse_mult_n') 
+wf.connect([(umc_tse_reslice_n, umc_tse_mult_n, [('out_files','in_file')])])
+wf.connect([(selectfiles, umc_tse_mult_n, [('umc_tse_whole','in_file')])])        
 
 ############
 ## Step 4 ##
@@ -167,9 +174,9 @@ wf.connect([(selectfiles, mag_register_n, [('mag_tse_whole', 'moving_image')])])
 mag_native_move_n = MapNode(ApplyTransforms(dimension = 3, interpolation = 'BSpline'),
                             name='mag_native_move_n', iterfield=['input_file'])
 wf.connect([(selectfiles, mag_native_move_n, [('mag_tse_native', 'input_file')])])
-wf.connect([(mag_register_n, mag_native_move_n, [('out_matrix', 'transforms')])]) #need to figure out where the affine is from the previous step. Does it have a standard name?
+wf.connect([(mag_register_n, mag_native_move_n, [('out_matrix', 'transforms')])]) 
 
-    
+
 ######got up to here.
 
 ##############
@@ -189,8 +196,10 @@ wf.connect([(mag_register_n, mag_native_move_n, [('out_matrix', 'transforms')])]
 ################
 ## DATA SINK  ##
 ################
-datasink = Node(DataSink(base_directory=experiment_dir, container=output_dir),
-                name='datasink')
+datasink = Node(DataSink(base_directory=experiment_dir,
+                         container=output_dir),
+                name="datasink")
+
 wf.connect([(umc_tse_mult_n, datasink, [('out_files', 'umc_native_resized_final')])])
 #wf.connect([(n, datasink, [('out_file', 'tse_resized')])])
 #wf.connect([(n, datasink, [('out_file', 'segmentation_resized')])])
@@ -209,4 +218,4 @@ wf.run(plugin='MultiProc', plugin_args={'n_procs' : 20})
 
 #This is for running at CAI
 # qsub_args='-N 1,-c 4,--partition=all, --mem=16000'))
-   #running at Awoonga:
+#running at Awoonga:
