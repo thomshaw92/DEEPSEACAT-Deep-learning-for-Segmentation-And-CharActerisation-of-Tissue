@@ -141,11 +141,15 @@ wf.connect([(selectfiles, umc_tse_pad_bin_n, [('umc_tse_native','in_file')])])
 ## Step 3 ##
 ############
 #then multiply the bin mask by the original TSE to get the same sized chunks across the dataset. (prolly have to -reslice identity first
-
+#because we have two inputs to multiply, we may need to add the output from the previous step to selectfiles?
+# Or we can make the outfiles into variables? Not sure how to do this.
+#
 
 umc_tse_reslice_n =  Node(C3d(interp = "Sinc", pix_type = 'float', args = '-reslice-identity'),
                              name='umc_tse_reslice_n')
-wf.connect([(umc_tse_pad_bin_n, umc_tse_reslice_n, [('out_files','in_file')])])
+wf.connect([(umc_tse_pad_bin_n, umc_tse_reslice_n, [('out_files','in_file'),
+                                                    
+])])
 wf.connect([(selectfiles, umc_tse_reslice_n, [('umc_tse_whole','in_file')])])
 
 #then multiply
