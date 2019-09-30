@@ -12,7 +12,7 @@ workdir=/data/fastertemp/uqtshaw/DEEPSEACAT_atlas
 
 mkdir ${workdir}
 cd ${workdir}
-
+export ITK_GLOBAL_DEFAUL_NUMBER_OF_THREADS=35
 ######################################################################
 #This all needs to be done only once so commented out for the moment##
 ######################################################################
@@ -123,13 +123,13 @@ for x in  {00..25} ; do
 	     -reslice-identity \
 	     -type float \
 	     -interpolation sinc \
-	     ${umc_atlasdir}/train/train0${x}/tse_native_chunk_${side}_pad-176x144x128_bin_reslice_to_whole.nii.gz 
+	     -o ${umc_atlasdir}/train/train0${x}/tse_native_chunk_${side}_pad-176x144x128_bin_reslice_to_whole.nii.gz 
 	
 	c3d ${umc_atlasdir}/train/train0${x}/tse.nii.gz ${umc_atlasdir}/train/train0${x}/tse_native_chunk_${side}_pad-176x144x128_bin_reslice_to_whole.nii.gz \
 	    -multiply \
 	    -type float \
 	    -interpolation sinc \
-	    ${umc_atlasdir}/train/train0${x}/tse_native_chunk_${side}_nopad-176x144x128.nii.gz
+	    -o ${umc_atlasdir}/train/train0${x}/tse_native_chunk_${side}_nopad-176x144x128.nii.gz
 	
     done
 done
@@ -235,7 +235,7 @@ for side in left right ; do
 	c3d ${mag_atlasdir}/train/train0${x}/tse_native_chunk_${side}_nopad-176x144x128.nii.gz ${mag_atlasdir}/train/train0${x}/tse_native_chunk_${side}_seg_warped_to_umc.nii.gz \
 	    -reslice-identity \
 	    -type float \
-	    -interpolation sinc \
+	    -interpolation  NearestNeighbor \
 	    -o ${mag_atlasdir}/train0${x}/${x}_${side}_seg_chunk_resampled-0.35mmIso_nopad-176x144x128.nii.gz
     done
 done
@@ -244,7 +244,7 @@ for side in left right ; do
     for x in {00..25} ; do
 	c3d  ${umc_atlasdir}/train/train0${x}/tse_native_chunk_${side}_nopad-176x144x128.nii.gz ${umc_atlasdir}/train0${x}/tse_native_chunk_${side}_seg.nii.gz \
 	     -type float \
-	     -interpolation sinc \
+	     -interpolation NearestNeighbor \
 	     -o ${umc_atlasdir}/train0${x}/${x}_${side}_seg_chunk_resampled-0.35mmIso_nopad-176x144x128.nii.gz
     done
 done
