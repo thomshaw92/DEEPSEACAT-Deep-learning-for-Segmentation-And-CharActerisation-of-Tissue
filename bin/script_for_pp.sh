@@ -15,73 +15,71 @@ cd ${workdir}
 
 #first add the files to a CSV
 
-for side in left right ; do
-    for x in {00..32} ; do
-	echo "/data/fastertemp/uqtshaw/ashs_atlas_magdeburg_7t_20180416/train/train0${x}/tse_to_chunktemp_${side}.nii.gz,/data/fastertemp/uqtshaw/ashs_atlas_magdeburg_7t_20180416/train/train0${x}/mprage_to_chunktemp_${side}.nii.gz">>${side}_template_input.csv
-    done
-    for x in  {00..25} ; do
-	echo "/data/fastertemp/uqtshaw/ashs_atlas_umcutrecht_7t_20170810/train/train0${x}/tse_to_chunktemp_${side}.nii.gz,/data/fastertemp/uqtshaw/ashs_atlas_umcutrecht_7t_20170810/train/train0${x}/mprage_to_chunktemp_${side}.nii.gz">>${side}_template_input.csv
-    done
-done
+#for side in left right ; do
+#    for x in {00..32} ; do
+#	echo "/data/fastertemp/uqtshaw/ashs_atlas_magdeburg_7t_20180416/train/train0${x}/tse_to_chunktemp_${side}.nii.gz,/data/fastertemp/uqtshaw/ashs_atlas_magdeburg_7t_20180416/train/train0${x}/mprage_to_chunktemp_${side}.nii.gz">>${side}_template_input.csv
+#    done
+#    for x in  {00..25} ; do
+#	echo "/data/fastertemp/uqtshaw/ashs_atlas_umcutrecht_7t_20170810/train/train0${x}/tse_to_chunktemp_${side}.nii.gz,/data/fastertemp/uqtshaw/ashs_atlas_umcutrecht_7t_20170810/train/train0${x}/mprage_to_chunktemp_${side}.nii.gz">>${side}_template_input.csv
+#    done
+#done
 
 #make a template of the average morphology. Prolly only need one iteration as they are already all registered. 
-for side in left right ; do
-    mkdir ${workdir}/${side}_template
-    cd ${workdir}/${side}_template
-    antsMultivariateTemplateConstruction2.sh -d 3 \
-					     -i 4 \
-					     -g 0.20 \
-					     -k 2 \
-					     -t SyN \
-					     -n 0 \
-					     -c 5 \
-					     -r 1 \
-					     -y 0 \
-					     -o ${side}_ ${workdir}/${side}_template_input.csv 
-    
-    cp ${workdir}/${side}_template/${side}_template0.nii.gz ${workdir}/${side}_tse_template.nii.gz
-    cp ${workdir}/${side}_template/${side}_template1.nii.gz ${workdir}/${side}_mprage_template.nii.gz
+#for side in left right ; do
+#    mkdir ${workdir}/${side}_template
+#   cd ${workdir}/${side}_template
+#   antsMultivariateTemplateConstruction2.sh -d 3 \
+#					     -i 4 \
+#					     -g 0.20 \
+#					     -k 2 \
+#					     -t SyN \
+#					     -n 0 \
+#					     -c 5 \
+#					     -r 1 \
+#					     -y 0 \
+#					     -o ${side}_ ${workdir}/${side}_template_input.csv 
+
+#    cp ${workdir}/${side}_template/${side}_template0.nii.gz ${workdir}/${side}_tse_template.nii.gz
+#    cp ${workdir}/${side}_template/${side}_template1.nii.gz ${workdir}/${side}_mprage_template.nii.gz
+#done
+
+#cd ${workdir}
+
+for side in "left" "right" ; do
+    for seg in "tse" "mprage" ; do     	
+	#resize
+	c3d ${workdir}/${side}_${seg}_template.nii.gz \
+	    -type float \
+	    -resample-mm 0.35x0.35x0.35mm \
+	    -interpolation sinc \
+	    -o ${workdir}/${side}_${seg}_template_resampled-0.35mmIso.nii.gz
+
+	#Rescale intensities between -1 and 1
+	ImageMath \
+	    3 \
+	    ${workdir}/${side}_${seg}_template_resampled-0.35mmIso_rescaled.nii.gz \
+	    RescaleImage ${workdir}/${side}_${seg}_template_resampled-0.35mmIso.nii.gz -1 1
+	#Give the templates zero mean and unit variance.
+	std=""
+	mean=""
+	mean=`fslstats ${workdir}/${side}_${seg}_template_resampled-0.35mmIso_rescaled.nii.gz -m | awk '{print $1}'`
+	fslmaths ${workdir}/${side}_${seg}_template_resampled-0.35mmIso_rescaled.nii.gz -sub ${mean} ${workdir}/${side}_${seg}_template_resampled-0.35mmIso_rescaled_0mean.nii.gz
+	std=`fslstats ${workdir}/${side}_${seg}_template_resampled-0.35mmIso_rescaled_0mean.nii.gz -s | awk '{print $1}'`
+	fslmaths ${workdir}/${side}_${seg}_template_resampled-0.35mmIso_rescaled_0mean.nii.gz -div ${std} ${workdir}/${side}_${seg}_template_resampled-0.35mmIso_rescaled_0meanUv.nii.gz
+
+	#Pad the templates to correct size, create a mask.
+	c3d ${workdir}/${side}_${seg}_template_resampled-0.35mmIso_rescaled_0meanUv.nii.gz \
+	    -type float \
+	    -interpolation sinc \
+	    -pad-to 176x144x128 0 \
+	    -o ${workdir}/${side}_${seg}_template_resampled-0.35mmIso_rescaled_0meanUv_pad-176x144x128.nii.gz
+
+	fslmaths ${workdir}/${side}_${seg}_template_resampled-0.35mmIso_rescaled_0meanUv_pad-176x144x128.nii.gz \
+	    -add 1 \
+	    -bin  \
+	    ${workdir}/${side}_${seg}_template_resampled-0.35mmIso_rescaled_0meanUv_pad-176x144x128-bin.nii.gz
+    done
 done
-
-cd ${workdir}
-
-for side in  left right ; do 
-    #resize
-    c3d ${workdir}/${side}_${seg}_template.nii.gz \
-	-type float \
-	-resample-mm 0.35x0.35x0.35mm \
-	-interpolation sinc \
-	-o ${workdir}/${side}_${seg}_template_resampled-0.35mmIso.nii.gz
-
-    #Rescale intensities between -1 and 1
-    ImageMath 3 \
-	      ${workdir}/${side}_${seg}_template_resampled-0.35mmIso_rescaled.nii.gz \
-	      RescaleImage -1 1 \
-	      ${workdir}/${side}_${seg}_template_resampled-0.35mmIso.nii.gz
-
-    #Give the templates zero mean and unit variance.
-    std=""
-    mean=""
-    mean=`fslstats ${x} -m | awk '{print $1}'`
-    fslmaths ${workdir}/${side}_${seg}_template_resampled-0.35mmIso_rescaled.nii.gz -sub ${mean} ${workdir}/${side}_${seg}_template_resampled-0.35mmIso_rescaled_0mean.nii.gz
-    std=`fslstats ${side}_${seg}_template_resampled-0.35mmIso_rescaled_0mean.nii.gz -s | awk '{print $1}'`
-    fslmaths ${workdir}/${side}_${seg}_template_resampled-0.35mmIso_rescaled_0mean.nii.gz -div ${std} ${workdir}/${side}_${seg}_template_resampled-0.35mmIso_rescaled_0meanUv.nii.gz
-
-    #Pad the templates to correct size, create a mask.
-    c3d ${workdir}/${side}_${seg}_template_resampled-0.35mmIso_rescaled_0meanUv.nii.gz \
-	-type float \
-	-interpolation sinc \
-	-pad-to 176x144x128 0 \
-	-o ${workdir}/${side}_${seg}_template_resampled-0.35mmIso_rescaled_0meanUv_pad-176x144x128.nii.gz
-
-    c3d ${workdir}/${side}_${seg}_template_resampled-0.35mmIso_rescaled_0meanUv_pad-176x144x128.nii.gz \
-	-type float \
-	-add 1 \
-	-interpolation sinc \
-	-binarize  \
-	-o ${workdir}/${side}_${seg}_template_resampled-0.35mmIso_rescaled_0meanUv_pad-176x144x128-bin.nii.gz
-done
-
 
 #Subject Processing#
 
@@ -99,77 +97,77 @@ mkdir ${workdir}/preprocessing_output
 #We need to buff it up to 0.35mm iso anyway to get the resolution consistent across all data
 
 for x in  {00..25} ; do
-    c3d ${umc_atlasdir}/train/train_${x}/tse.nii.gz \
+    c3d ${umc_atlasdir}/train/train0${x}/tse.nii.gz \
 	-type float \
 	-interpolation sinc \
 	-resample-mm 0.35x0.35x0.35mm \
-	-o ${umc_atlasdir}/train/train_${x}/tse_resampled-0.35mmIso.nii.gz
+	-o ${umc_atlasdir}/train/train0${x}/tse_resampled-0.35mmIso.nii.gz
 
     #But the chunks are different sizes, so we will resize them to the correct size.
     #pad the tse_native_chunk to the correct size, binarize, 
     for side in left right ; do 
-	c3d ${umc_atlasdir}/train/train_${x}/tse_native_chunk_${side}.nii.gz \
+	c3d ${umc_atlasdir}/train/train0${x}/tse_native_chunk_${side}.nii.gz \
 	    -type float \
 	    -interpolation sinc \
 	    -resample-mm 0.35x0.35x0.35mm \
 	    -pad-to 176x144x128 0 \
 	    -binarize \
-	    -o ${umc_atlasdir}/train/train_${x}/tse_native_chunk_${side}_pad-176x144x128_bin.nii.gz
+	    -o ${umc_atlasdir}/train/train0${x}/tse_native_chunk_${side}_pad-176x144x128_bin.nii.gz
 
 
 	#then multiply by the original TSE to get the same sized chunks across the dataset.
 	#reslice first
-	c3d  ${umc_atlasdir}/train/train_${x}/tse_native_chunk_${side}_pad-176x144x128_bin.nii.gz \
-	    ${umc_atlasdir}/train/train_${x}/tse.nii.gz	\
-	    -reslice-identity \
-	    -type float \
-	    -interpolation sinc \
-	    ${umc_atlasdir}/train/train_${x}/tse_native_chunk_${side}_pad-176x144x128_bin_reslice_to_whole.nii.gz 
+	c3d  ${umc_atlasdir}/train/train0${x}/tse_native_chunk_${side}_pad-176x144x128_bin.nii.gz \
+	     ${umc_atlasdir}/train/train0${x}/tse.nii.gz \
+	     -reslice-identity \
+	     -type float \
+	     -interpolation sinc \
+	     ${umc_atlasdir}/train/train0${x}/tse_native_chunk_${side}_pad-176x144x128_bin_reslice_to_whole.nii.gz 
 	
-	c3d ${umc_atlasdir}/train/train_${x}/tse_native_chunk_${side}_pad-176x144x128_bin_reslice_to_whole.nii.gz \
-	    ${umc_atlasdir}/train/train_${x}/tse.nii.gz	\
+	c3d ${umc_atlasdir}/train/train0${x}/tse_native_chunk_${side}_pad-176x144x128_bin_reslice_to_whole.nii.gz \
+	    ${umc_atlasdir}/train/train0${x}/tse.nii.gz	\
 	    -multiply \
 	    -type float \
 	    -interpolation sinc \
-	    ${umc_atlasdir}/train/train_${x}/tse_native_chunk_${side}_nopad-176x144x128.nii.gz
+	    ${umc_atlasdir}/train/train0${x}/tse_native_chunk_${side}_nopad-176x144x128.nii.gz
 	
     done
 done
 
-    #for the madeburg one, the data is anisotropic, so we need to resample the scans into the space of the umc data.
+#for the madeburg one, the data is anisotropic, so we need to resample the scans into the space of the umc data.
 
-    #making the TSE template in 1mm iso because otherwise it is too big. This only needs to be done once so i am commenting it
-    #c3d ${umc_atlasdir}/train/train_${x}/tse.nii.gz \
-    #    -type float \
-    #    -resample-mm 1x1x1mm \
-    #    -interpolation sinc \
-    #    -o ${umc_atlasdir}/train/train_${x}/tse_resampled_1mmIso.nii.gz
+#making the TSE template in 1mm iso because otherwise it is too big. This only needs to be done once so i am commenting it
+#c3d ${umc_atlasdir}/train/train_${x}/tse.nii.gz \
+#    -type float \
+#    -resample-mm 1x1x1mm \
+#    -interpolation sinc \
+#    -o ${umc_atlasdir}/train/train_${x}/tse_resampled_1mmIso.nii.gz
 
-    #Then create a TSE template because I don't want to bias my registrations to one subject. Also only needs to be done once
-    #tse template should be released with package
+#Then create a TSE template because I don't want to bias my registrations to one subject. Also only needs to be done once
+#tse template should be released with package
 
-    #antsMultivariateTemplateConstruction2.sh  \
-    #    -d 3 \
-    #    -i 4 \
-    #    -k 1 \
-    #    -g 0.25 \
-    #    -t SyN \
-    #    -n 1 \
-    #    -r 1 \
-    #    -c 5 \
-    #    -o ${umc_atlasdir}/template/tse_template_ \
-    #    ${umc_atlasdir}/train/train0*/tse_resampled_1mmIso.nii.gz
+#antsMultivariateTemplateConstruction2.sh  \
+#    -d 3 \
+#    -i 4 \
+#    -k 1 \
+#    -g 0.25 \
+#    -t SyN \
+#    -n 1 \
+#    -r 1 \
+#    -c 5 \
+#    -o ${umc_atlasdir}/template/tse_template_ \
+#    ${umc_atlasdir}/train/train0*/tse_resampled_1mmIso.nii.gz
 
-    #Then resample the template to 0.35mm iso (again, only done once.)
+#Then resample the template to 0.35mm iso (again, only done once.)
 
 
-    #c3d ${umc_atlasdir}/template/tse_template_template0.nii.gz \
-    #    -type float \
-    #    -resample-mm 0.35x0.35x0.35mm \
-    #    -interpolation sinc \
-    #    -o ${umc_atlasdir}/template/tse_template_resampled_0.35mm.nii.gz
+#c3d ${umc_atlasdir}/template/tse_template_template0.nii.gz \
+#    -type float \
+#    -resample-mm 0.35x0.35x0.35mm \
+#    -interpolation sinc \
+#    -o ${umc_atlasdir}/template/tse_template_resampled_0.35mm.nii.gz
 
-    #then rigidly register the TSE.nii scans of every magdeburg participant to the template of the UMC peeps.
+#then rigidly register the TSE.nii scans of every magdeburg participant to the template of the UMC peeps.
 
 for side in left right ; do
     for x in {00..32} ; do
