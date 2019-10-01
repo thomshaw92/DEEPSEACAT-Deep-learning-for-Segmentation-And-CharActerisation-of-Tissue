@@ -48,14 +48,14 @@ github_dir = '/data/fastertemp/uqtshaw/DEEPSEACAT_atlas/DEEPSEACAT-Deep-learning
 #the outdir
 output_dir = 'output_dir'
 #working_dir name
-working_dir = 'workingdir_preprocessing'
+working_dir = 'Nipype_working_dir'
 #other things to be set up
 dataset_list = ['umcutrecht']
 side_list = ['right']
 subject_list = ['train000', 'train001']
 #####################
 
-wf = Workflow(name='train_preprocess_DL_hippo') 
+wf = Workflow(name='Workflow_preprocess_DL_hippo') 
 wf.base_dir = os.path.join(experiment_dir+working_dir)
 
 # create infosource to iterate over iterables
@@ -108,17 +108,11 @@ wf.connect([(infosource, selectfiles, [('subject_id', 'subject_id'),
 #seeing as the UMC dataset is already close to isotropic, we will use it as our standard.
 #Native chunks for TSE contain the segmentation, so we will keep them in this space.
 #We need to change the whole tse to 0.35mm iso anyway to get the resolution consistent across all data
-
-umc_tse_resample_n = MapNode(C3d(interp = "Sinc", args = '-resample-mm 0.35x0.35x0.35mm', out_files = 'umc_tse_resampled%02d.nii.gz'),
+'''
+umc_tse_resample_n = MapNode(C3d(interp = "Sinc", args = '-resample-mm 0.35x0.35x0.35mm'),
                              name='umc_tse_resample_n', iterfield =['in_file']) 
 wf.connect([(selectfiles, umc_tse_resample_n, [('umc_tse_whole','in_file')])])
-
-#datasink = Node(DataSink(base_directory=experiment_dir,
- #                        container=output_dir),
- #               name="datasink")
-
-#wf.connect([(umc_tse_resample_n, datasink, [('out_files', 'tse_resampled')])])
-
+'''
 
 ############
 ## Step 2 ##
@@ -126,29 +120,48 @@ wf.connect([(selectfiles, umc_tse_resample_n, [('umc_tse_whole','in_file')])])
 
 #But the chunks are different sizes, so we will resize them to the correct size.
 #pad the tse_native_chunk to the correct size, binarize, and resample
- 
-umc_tse_pad_bin_n = MapNode(C3d(interp = "Sinc", pix_type = 'float', args = '-resample-mm 0.35x0.35x0.35mm -pad-to 176x144x128 0 -binarize', out_file = 'umc_tse_chunk_resampled%02d.nii.gz'),
+
+umc_tse_pad_bin_n = MapNode(C3d(interp = "Sinc", pix_type = 'float', args = '-resample-mm 0.35x0.35x0.35mm -pad-to 176x144x128 0 -binarize' , out_files = 'tse_chunk_resampled_padded_binarized.nii.gz'),
                             name='umc_tse_pad_bin_n', iterfield=['in_file']) 
 wf.connect([(selectfiles, umc_tse_pad_bin_n, [('umc_tse_native','in_file')])])
 
-wf.run()
-
+'''
+umc_tse_pad_bin_n = MapNode(FLIRT(),
+                            name='umc_tse_pad_bin_n', iterfield=['in_file']) 
+wf.connect([(selectfiles, umc_tse_pad_bin_n, [('umc_tse_native','in_file')])])
+wf.connect([(selectfiles, umc_tse_pad_bin_n, [('umc_tse_native','reference')])])
 '''
 
-############
+
+############    
 ## Step 3 ##
 ############
+
 #then multiply the bin mask by the original TSE to get the same sized chunks across the dataset. (prolly have to -reslice identity first
 #because we have two inputs to multiply, we may need to add the output from the previous step to selectfiles?
 # Or we can make the outfiles into variables? Not sure how to do this.
 #
 
-umc_tse_reslice_n =  Node(C3d(interp = "Sinc", pix_type = 'float', args = '-reslice-identity', out_files = 'umc_tse_chunk_resliced%02d.nii.gz'),
-                             name='umc_tse_reslice_n')
+prut = ['/winmounts/uqdlund/uq-research/DEEPSEACAT-Q1219/data/Nipype_working_dir/Workflow_preprocess_DL_hippo/_dataset_id_umcutrecht_side_id_right_subject_id_train000/umc_tse_pad_bin_n/mapflow/_umc_tse_pad_bin_n0/tse_chunk_resampled_padded_binarized.nii.gz','/winmounts/uqdlund/uq-research/DEEPSEACAT-Q1219/data/Nipype_working_dir/Workflow_preprocess_DL_hippo/_dataset_id_umcutrecht_side_id_right_subject_id_train000/umc_tse_pad_bin_n/mapflow/_umc_tse_pad_bin_n0/tse_chunk_resampled_padded_binarized.nii.gz']
+
+
+umc_tse_reslice_n =  MapNode(C3d(interp = "Sinc", pix_type = 'float', args = '-reslice-identity', out_files = 'umc_tse_chunk_resliced.nii.gz'),
+                             name='umc_tse_reslice_n', iterfield =['in_file'])
+
 wf.connect([(umc_tse_pad_bin_n, umc_tse_reslice_n, [('out_files','in_file') ])])
 
-#wf.connect([(selectfiles, umc_tse_reslice_n, [('umc_tse_whole','in_file')])])
+wf.connect([(selectfiles, umc_tse_reslice_n, [('umc_tse_whole','opt_in_file')])])
 
+datasink = Node(DataSink(base_directory=experiment_dir+working_dir,
+                         container=output_dir),
+                name="datasink")
+
+wf.connect([(umc_tse_reslice_n, datasink, [('out_files', 'tse_resampled')])])
+
+wf.run()
+
+
+'''
 #then multiply
 umc_tse_mult_n = Node(C3d(interp = "Sinc", pix_type = 'float', args = '-multiply'),
                           name='umc_tse_mult_n') 
