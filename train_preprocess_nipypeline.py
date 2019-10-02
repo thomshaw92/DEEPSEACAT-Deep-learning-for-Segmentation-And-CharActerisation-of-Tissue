@@ -43,7 +43,7 @@ experiment_dir = '/winmounts/uqdlund/uq-research/DEEPSEACAT-Q1219/data/'
 #where all the atlases live
 data_dir = '/data/fastertemp/uqtshaw/'
 #files from github that need to be included in the distribution
-github_dir = '/data/fastertemp/uqtshaw/DEEPSEACAT_atlas/DEEPSEACAT-Deep-learning-for-Segmentation-And-CharActerisation-of-Tissue/lib/'
+github_dir = '/data/home/uqdlund/DEEPSEACAT-Deep-learning-for-Segmentation-And-CharActerisation-of-Tissue/lib/'
 ###############
 #the outdir
 output_dir = 'output_dir'
@@ -88,13 +88,15 @@ templates = {'umc_tse_native' : 'ashs_atlas_umcutrecht/train/{subject_id}/tse_na
              'umc_seg_native' : 'ashs_atlas_umcutrecht/train/{subject_id}/tse_native_chunk_{side_id}_seg.nii.gz',
              'mag_seg_native' : 'ashs_atlas_magdeburg/train/{subject_id}/tse_native_chunk_{side_id}_seg.nii.gz',
              #mprage
-             'mprage_chunk' : 'ashs_atlas_{dataset_id}*/train/{subject_id}/mprage_to_chunktemp_{side_id}.nii.gz'}
+             'umc_mprage_chunk' : 'ashs_atlas_umcutrecht/train/{subject_id}/mprage_to_chunktemp_{side_id}.nii.gz',
+             'mag_mprage_chunk' : 'ashs_atlas_magdeburg/train/{subject_id}/mprage_to_chunktemp_{side_id}.nii.gz',
+             }
 
 bespoke_files = {'umc_tse_template' : 'umc_tse_template.nii.gz'}    
 
 selectfiles = Node(SelectFiles(templates, base_directory=experiment_dir), name='selectfiles')
 
-#selecttemplates = Node(SelectFiles(bespoke_files, base_directory=github_dir), name='selecttemplates')
+selecttemplates = Node(SelectFiles(bespoke_files, base_directory=github_dir), name='selecttemplates')
 
 wf.connect([(infosource, selectfiles, [('subject_id', 'subject_id'),
                                        ('side_id', 'side_id'),
@@ -109,7 +111,8 @@ wf.connect([(infosource, selectfiles, [('subject_id', 'subject_id'),
 #Native chunks for TSE contain the segmentation, so we will keep them in this space.
 #We need to change the whole tse to 0.35mm iso anyway to get the resolution consistent across all data
 '''
-umc_tse_resample_n = MapNode(C3d(interp = "Sinc", args = '-resample-mm 0.35x0.35x0.35mm'),
+# Maybe we don't need the out_files specified here?
+umc_tse_resample_n = MapNode(C3d(interp = "Sinc", args = '-resample-mm 0.35x0.35x0.35mm', out_files = 'umc_tse_whole_resampled.nii.gz'),
                              name='umc_tse_resample_n', iterfield =['in_file']) 
 wf.connect([(selectfiles, umc_tse_resample_n, [('umc_tse_whole','in_file')])])
 '''
@@ -125,6 +128,14 @@ umc_tse_pad_bin_n = MapNode(C3d(interp = "Sinc", pix_type = 'float', args = '-re
                             name='umc_tse_pad_bin_n', iterfield=['in_file']) 
 wf.connect([(selectfiles, umc_tse_pad_bin_n, [('umc_tse_native','in_file')])])
 
+
+## Step 2.5 resample+pad segmentation ##
+umc_seg_resample_pad_n = MapNode(C3d(interp = "Sinc", pix_type = 'float', args = '-resample-mm 0.35x0.35x0.35mm -pad-to 176x144x128 0' , out_files = 'umc_chunk_seg_resampled_padded.nii.gz'),
+                            name='umc_seg_resample_pad_n', iterfield=['in_file']) 
+wf.connect([(selectfiles, umc_tse_pad_bin_n, [('umc_seg_native','in_file')])])
+
+
+###### READY ###### Done with umc_native_seg and Ready for datasink
 '''
 umc_tse_pad_bin_n = MapNode(FLIRT(),
                             name='umc_tse_pad_bin_n', iterfield=['in_file']) 
@@ -142,42 +153,39 @@ wf.connect([(selectfiles, umc_tse_pad_bin_n, [('umc_tse_native','reference')])])
 # Or we can make the outfiles into variables? Not sure how to do this.
 #
 
-prut = ['/winmounts/uqdlund/uq-research/DEEPSEACAT-Q1219/data/Nipype_working_dir/Workflow_preprocess_DL_hippo/_dataset_id_umcutrecht_side_id_right_subject_id_train000/umc_tse_pad_bin_n/mapflow/_umc_tse_pad_bin_n0/tse_chunk_resampled_padded_binarized.nii.gz','/winmounts/uqdlund/uq-research/DEEPSEACAT-Q1219/data/Nipype_working_dir/Workflow_preprocess_DL_hippo/_dataset_id_umcutrecht_side_id_right_subject_id_train000/umc_tse_pad_bin_n/mapflow/_umc_tse_pad_bin_n0/tse_chunk_resampled_padded_binarized.nii.gz']
-
 
 umc_tse_reslice_n =  MapNode(C3d(interp = "Sinc", pix_type = 'float', args = '-reslice-identity', out_files = 'umc_tse_chunk_resliced.nii.gz'),
                              name='umc_tse_reslice_n', iterfield =['in_file'])
 
 wf.connect([(umc_tse_pad_bin_n, umc_tse_reslice_n, [('out_files','in_file') ])])
 
+# For test purposes. --> Real line: wf.connect([(umc_tse_resample_n, umc_tse_reslice_n, [('out_files','opt_in_file')])])
 wf.connect([(selectfiles, umc_tse_reslice_n, [('umc_tse_whole','opt_in_file')])])
 
-datasink = Node(DataSink(base_directory=experiment_dir+working_dir,
-                         container=output_dir),
-                name="datasink")
 
-wf.connect([(umc_tse_reslice_n, datasink, [('out_files', 'tse_resampled')])])
-
-wf.run()
+###### READY ###### Done with umc_native_tse_chunk and Ready for datasink
 
 
 '''
+# should not be needed
 #then multiply
 umc_tse_mult_n = Node(C3d(interp = "Sinc", pix_type = 'float', args = '-multiply'),
                           name='umc_tse_mult_n') 
 wf.connect([(umc_tse_reslice_n, umc_tse_mult_n, [('out_files','in_file')])])
 wf.connect([(selectfiles, umc_tse_mult_n, [('umc_tse_whole','in_file')])])        
-
+'''
 ############
 ## Step 4 ##
 ############
 # The Mag data needs to be resampled to the right resolution, but doing this willblow the the z direction out in terms of image size
 # So we register the TSEs of the magdeberg dataset to the template of the
-#UMC dataset rigidly.The template is in the github repo cause we had to make it first (see bash script).
-mag_register_n = MapNode(RegistrationSynQuick(transform_type = 'r', use_histogram_matching=True ), 
+# UMC dataset rigidly.The template is in the github repo cause we had to make it first (see bash script).
+mag_register_n = MapNode(RegistrationSynQuick(transform_type = 'r', use_histogram_matching=True), 
                          name='mag_register_n', iterfield=['moving_image'])
+
 wf.connect([(selecttemplates, mag_register_n, [('umc_tse_template', 'fixed_image')])])
 wf.connect([(selectfiles, mag_register_n, [('mag_tse_whole', 'moving_image')])])
+
 
 ############
 ## Step 5 ##
@@ -186,13 +194,85 @@ wf.connect([(selectfiles, mag_register_n, [('mag_tse_whole', 'moving_image')])])
 #First, take the transformation that we just computed and apply it to the tse_native_chunk
 
 mag_native_move_n = MapNode(ApplyTransforms(dimension = 3, interpolation = 'BSpline'),
-                            name='mag_native_move_n', iterfield=['input_file'])
-wf.connect([(selectfiles, mag_native_move_n, [('mag_tse_native', 'input_file')])])
-wf.connect([(mag_register_n, mag_native_move_n, [('out_matrix', 'transforms')])]) 
+                            name='mag_native_move_n', iterfield=['input_image', 'transforms', 'reference_image']) #Hmm, we should need to iterate over transforms as well??
+wf.connect([(selectfiles, mag_native_move_n, [('mag_tse_native', 'input_image')])])
+wf.connect([(mag_register_n, mag_native_move_n, [('out_matrix', 'transforms'),
+                                                 ('warped_image','reference_image')])]) 
+
+mag_seg_native_move_n = MapNode(ApplyTransforms(dimension = 3, interpolation = 'BSpline'),
+                            name='mag_seg_native_move_n', iterfield=['input_image', 'transforms', 'reference_image'])
+wf.connect([(selectfiles, mag_seg_native_move_n, [('mag_seg_native', 'input_image')])])
+wf.connect([(mag_register_n, mag_seg_native_move_n, [('out_matrix', 'transforms'),
+                                                 ('warped_image','reference_image')])])
 
 
-######got up to here.
 
+
+##################
+##  New Step 6  ##
+##################
+# Repeat Steps 2-3 but with registered Magdeburg
+
+# Do we need resampling here after applying transformations further up??
+mag_tse_pad_bin_n = MapNode(C3d(interp = "Sinc", pix_type = 'float', args = '-resample-mm 0.35x0.35x0.35mm -pad-to 176x144x128 0 -binarize' , out_files = 'mag_chunk_resampled_padded_binarized.nii.gz'),
+                            name='mag_tse_pad_bin_n', iterfield=['in_file']) 
+wf.connect([(mag_native_move_n, mag_tse_pad_bin_n, [('output_image','in_file')])])
+
+# resample+pad mag_seg_native here?? 
+###### READY ###### Then ready for Datasink!
+
+
+mag_tse_reslice_n =  MapNode(C3d(interp = "Sinc", pix_type = 'float', args = '-reslice-identity', out_files = 'mag_tse_chunk_resliced.nii.gz'),
+                             name='mag_tse_reslice_n', iterfield =['in_file'])
+
+wf.connect([(mag_tse_pad_bin_n, mag_tse_reslice_n, [('out_files','in_file') ])])
+
+# NOTE!! # For test purposes. --> Real line: wf.connect([(mag_register_n, mag_tse_reslice_n, [('warped_image','opt_in_file')])])
+wf.connect([(selectfiles, mag_tse_reslice_n, [('mag_tse_whole','opt_in_file')])])
+
+###### READY ###### mag_tse_native_chunk ready for Datasink
+
+
+
+##################
+##  New Step 7  ##
+##################
+# Ants the mprage to the freshly cutout tse_native_chunks
+# Currently this doesn't seem to work properly as the images does not have enough mutual information
+# Additionally it hangs for more than an hour, so still an unfinished node here.
+
+## Magdeburg ##
+mag_mprage_to_tse_register_n = MapNode(RegistrationSynQuick(), # Tom has no registration input parameters here 
+                         name='mag_mprage_to_tse_register_n', iterfield=['moving_image'])
+
+## Register to non padded warped mag_tse_chunk?
+wf.connect([(mag_native_move_n, mag_mprage_to_tse_register_n, [('output_image', 'fixed_image')])])
+wf.connect([(selectfiles, mag_mprage_to_tse_register_n, [('mag_mprage_chunk', 'moving_image')])])
+
+
+## UMC ##
+umc_mprage_to_tse_register_n = MapNode(RegistrationSynQuick(), # Tom has no registration input parameters here 
+                         name='umc_mprage_to_tse_register_n', iterfield=['moving_image'])
+
+## Register to resampled or resliced mag_tse_chunk? We don't have just the resampled one currently
+# Tom currently registers to the whole resampled image, hmm... 
+wf.connect([(umc_tse_reslice_n, umc_mprage_to_tse_register_n, [('out_files', 'fixed_image')])])
+wf.connect([(selectfiles, umc_mprage_to_tse_register_n, [('umc_mprage_chunk', 'moving_image')])])
+
+
+# Remember to sink your data like a good boy
+
+datasink = Node(DataSink(base_directory=experiment_dir+working_dir,
+                         container=output_dir),
+                name="datasink")
+
+wf.connect([(umc_mprage_to_tse_register_n, datasink, [('warped_image', 'umc_mprage_to_tse_register')])])
+
+wf.run()
+
+
+
+'''
 ##############
 ##  Step 4  ##
 ##############
@@ -205,6 +285,11 @@ wf.connect([(mag_register_n, mag_native_move_n, [('out_matrix', 'transforms')])]
 #                          name='normalise_tse_n', iterfield=['in_file'])
 #wf.connect([(selectfiles, tse_flirt_n, [('out_file', 'in_file')])])
 #wf.connect #need to include the reference file here
+
+
+
+
+
 
 
 ################
@@ -229,8 +314,7 @@ wf.write_graph(graph2use='flat', format='png', simple_form=False)
 #wf.run(plugin='SLURMGraph', plugin_args = {'dont_resubmit_completed_jobs': True} )
 
 wf.run(plugin='MultiProc', plugin_args={'n_procs' : 20})
-
+'''
 #This is for running at CAI
 # qsub_args='-N 1,-c 4,--partition=all, --mem=16000'))
 #running at Awoonga:
-'''
