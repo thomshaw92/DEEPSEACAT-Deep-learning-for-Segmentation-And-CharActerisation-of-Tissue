@@ -31,6 +31,7 @@ else:
 config["dilation_block"] = True
 config["n_dil_block"]       = 1             # Must be at least 1 lower than depth
 config["residual"]          = True
+config["dense"] = True
 config["truth_channel"] = config["nb_channels"]
 config["deconvolution"] = True          # if False, will use upsampling instead of deconvolution
 config["n_base_filters"] = 64
@@ -86,5 +87,6 @@ model = unet_model_3d(input_shape = config["input_shape"],
                       initial_learning_rate = config["initial_learning_rate"],
                       deconvolution = config["deconvolution"],
                       residual = config["residual"],
+                      dense = config["dense"],
                       n_base_filters = config["n_base_filters"])
 

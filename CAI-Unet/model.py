@@ -24,7 +24,7 @@ except ImportError:
 
 
 def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_learning_rate=0.00001, deconvolution=False, 
-                  dilation_block = False, n_dil_block=1, residual=False, depth=4, n_base_filters=32, 
+                  dilation_block = False, n_dil_block=1, residual=False, dense=False, depth=4, n_base_filters=32, 
                   include_label_wise_dice_coefficients=False, metrics=dice_coefficient,
                   batch_normalization=False, activation_name="sigmoid"):
     """
@@ -49,6 +49,8 @@ def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_
     
     :param residual: Boolean - if set to True, will employ residual connections on each depth-level, currently matching n_filters for strided convolutions in encoder
     and 1x1x1 convolution to normalize input in decoder (default is False)
+    
+    :param dense: Boolean - if set to True, will employ dense connections
     
     :param depth: indicates the depth of the U-shape for the model. The greater the depth, the more (pooling layers)/(strided convolutional layers)
     will be added to the model. Lowering the depth will reduce the amount of memory required for training. (default is 4 (which is also where most testing occurred))
@@ -81,8 +83,32 @@ def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_
             
             layer2 = create_convolution_block(input_layer=layer1, n_filters=n_base_filters*(2**layer_depth),
                                           batch_normalization=batch_normalization, act_man = True)
+            
             layer2 = add([layer2, current_layer])
             layer2 = Activation('relu')(layer2)
+        
+        ## Dense implementation ##
+        elif dense:
+            
+            concat = concatenate([current_layer, layer1], axis=1)
+            
+            layer2 = create_convolution_block(input_layer=concat, n_filters=n_base_filters*(2**layer_depth),
+                                          batch_normalization=batch_normalization)
+            
+        ## Residual and Dense implementation ##
+        elif residual and dense:
+                        
+            concat = concatenate([current_layer, layer1], axis=1)
+            
+            layer2 = create_convolution_block(input_layer=concat, n_filters=n_base_filters*(2**layer_depth),
+                                          batch_normalization=batch_normalization, act_man = True)
+            
+            concat = concatenate([current_layer, layer1, layer2], axis=1) 
+            
+            layer2 = add([concat, current_layer])
+            layer2 = Activation('relu')(layer2)
+            
+        
         else:
             layer2 = create_convolution_block(input_layer=layer1, n_filters=n_base_filters*(2**layer_depth),
                                           batch_normalization=batch_normalization)
@@ -131,6 +157,13 @@ def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_
                                                  batch_normalization=batch_normalization, act_man=True)
             current_layer = add([current_layer, norm_conv])
             current_layer = Activation('relu')(current_layer)
+            
+            
+        ## Dense implementation ##
+        
+        
+        ## Residual and dense implementation ##
+        
         
         else:
             current_layer = create_convolution_block(n_filters=levels[layer_depth][1]._keras_shape[1],
