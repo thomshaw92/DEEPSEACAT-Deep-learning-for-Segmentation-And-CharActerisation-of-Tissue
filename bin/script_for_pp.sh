@@ -81,35 +81,42 @@ mkdir ${workdir}/preprocessing_output
 #Step one, seeing as the UMC dataset is already close to isotropic, we will use it as our standard.
 #Native chunks for TSE contain the segmentation, so we will keep them in this space.
 #We need to buff it up to 0.35mm iso anyway to get the resolution consistent across all data
+
+
 for x in  {00..25} ; do
     #this takes forever so i did it first all at once, commented.
-    #    c3d ${umc_atlasdir}/train/train0${x}/tse.nii.gz \
-    #	-type float \
-    #	-interpolation sinc \
-    #	-resample-mm 0.35x0.35x0.35mm \
-    #	-o ${umc_atlasdir}/train/train0${x}/tse_resampled-0.35mmIso.nii.gz & done
+#        c3d ${umc_atlasdir}/train/train0${x}/tse.nii.gz \
+#    	-type float \
+#    	-interpolation sinc \
+#    	-resample-mm 0.35x0.35x0.35mm \
+#   	-o ${umc_atlasdir}/train/train0${x}/tse_resampled-0.35mmIso.nii.gz
     #But the chunks are different sizes, so we will resize them to the correct size.
     #pad the tse_native_chunk to the correct size, binarize, 
     for side in left right ; do	
 	c3d ${umc_atlasdir}/train/train0${x}/tse_native_chunk_${side}.nii.gz \
 	    -type float \
-	    -interpolation sinc \
 	    -resample-mm 0.35x0.35x0.35mm \
 	    -pad-to 176x144x128 0 \
-	    -binarize \
-	    -o ${umc_atlasdir}/train/train0${x}/tse_native_chunk_${side}_pad-176x144x128_bin.nii.gz
+	    -o ${umc_atlasdir}/train/train0${x}/tse_native_chunk_${side}_pad-176x144x128.nii.gz
 	#then reslice the tse_whole to the new binarised chunks .
 	#reslice first
-	c3d ${umc_atlasdir}/train/train0${x}/tse_native_chunk_${side}_pad-176x144x128_bin.nii.gz ${umc_atlasdir}/train/train0${x}/tse.nii.gz \
+	c3d ${umc_atlasdir}/train/train0${x}/tse_native_chunk_${side}_pad-176x144x128.nii.gz ${umc_atlasdir}/train/train0${x}/tse.nii.gz \
 	    -reslice-identity \
 	    -type float \
 	    -interpolation sinc \
 	    -o ${umc_atlasdir}/train/train0${x}/tse_native_chunk_${side}_nopad-176x144x128.nii.gz
+	#you also need to create a resampled one for the mprage registration later
+
+	c3d ${umc_atlasdir}/train/train0${x}/tse_native_chunk_${side}.nii.gz \
+	    -type float \
+	    -interpolation sinc \
+	    -resample-mm 0.35x0.35x0.35mm \
+	    -o ${umc_atlasdir}/train/train0${x}/tse_native_chunk_${side}_resample_only.nii.gz
+		
     done
 done
-###
-#you need to add another resclice because the nopad is still in the space of the TSE_whole.
-###
+<<EOF
+
 
 #for the madeburg one, the data is anisotropic, so we need to resample the scans into the space of the umc data.
 #making the TSE template in 1mm iso because otherwise it is too big.
@@ -142,6 +149,7 @@ done
 #    -o ${umc_atlasdir}/template/tse_template_resampled_0.35mm.nii.gz
 #then rigidly register the TSE.nii scans of every magdeburg participant to the template of the UMC peeps.
 
+
 for side in left right ; do
     for x in {00..32} ; do
 	tse=${mag_atlasdir}/train/train0${x}/tse.nii.gz
@@ -155,6 +163,7 @@ for side in left right ; do
 	    -o ${mag_atlasdir}/train/train0${x}/tse_to_umc_space_rigid_
 	#Then we need to do the same as before, cut the TSE chunk out of the TSE
 	#antsApplyTransforms to the affine just created to the segmentation and the native chunk
+	#probably should just invert the transformation and reslice the seg and tse to the inverted TSE. 
 	antsApplyTransforms -d 3 \
 			    -i ${mag_atlasdir}/train/train0${x}/tse_native_chunk_${side}.nii.gz \
 			    -r ${mag_atlasdir}/train/train0${x}/tse_to_umc_space_rigid_Warped.nii.gz \
@@ -167,13 +176,19 @@ for side in left right ; do
 			    -o ${mag_atlasdir}/train/train0${x}/tse_native_chunk_${side}_seg_warped_to_umc.nii.gz \
 			    -t ${mag_atlasdir}/train/train0${x}/tse_to_umc_space_rigid_*eneric*ffine* \
 			    -n NearestNeighbor
+done
+done
+EOF
+
+for side in left right ; do
+    for x in {00..32} ; do
+
 	c3d ${mag_atlasdir}/train/train0${x}/tse_native_chunk_${side}_warped_to_umc.nii.gz \
 	    -type float \
 	    -interpolation sinc \
 	    -resample-mm 0.35x0.35x0.35mm \
 	    -pad-to 176x144x128 0 \
-	    -binarize \
-	    -o ${mag_atlasdir}/train/train0${x}/tse_native_chunk_${side}_pad-176x144x128_bin.nii.gz	
+	    -o ${mag_atlasdir}/train/train0${x}/tse_native_chunk_${side}_pad-176x144x128.nii.gz	
 	#then reslice the TSE to the chunk to get the same sized chunks across the dataset.
 	c3d ${mag_atlasdir}/train/train0${x}/tse_native_chunk_${side}_pad-176x144x128_bin.nii.gz ${mag_atlasdir}/train/train0${x}/tse_native_chunk_${side}_warped_to_umc.nii.gz\
 	    -reslice-identity \
@@ -183,15 +198,18 @@ for side in left right ; do
 	#now everything is in the same space and size except the segmentations and mprage	
     done
 done
+
+
 for side in left right ; do
     for x in {00..32} ; do	
 	#fix the size of the seg to be the same as the nopad files.
 	#the mag one is in the same space as the tse native but needs to have the same size
+	
 	c3d ${mag_atlasdir}/train/train0${x}/tse_native_chunk_${side}_nopad-176x144x128.nii.gz ${mag_atlasdir}/train/train0${x}/tse_native_chunk_${side}_seg_warped_to_umc.nii.gz \
 	    -reslice-identity \
 	    -type float \
-	    -interpolation  NearestNeighbor \
-	    -o ${mag_atlasdir}/train0${x}/${x}_${side}_seg_chunk_resampled-0.35mmIso_nopad-176x144x128.nii.gz
+	    -interpolation NearestNeighbor \
+	    -o ${mag_atlasdir}/train0${x}/${side}_seg_chunk_resampled-0.35mmIso_nopad-176x144x128.nii.gz
     done
 done
 for side in left right ; do
@@ -199,7 +217,7 @@ for side in left right ; do
 	c3d  ${umc_atlasdir}/train/train0${x}/tse_native_chunk_${side}_nopad-176x144x128.nii.gz ${umc_atlasdir}/train0${x}/tse_native_chunk_${side}_seg.nii.gz \
 	     -type float \
 	     -interpolation NearestNeighbor \
-	     -o ${umc_atlasdir}/train0${x}/${x}_${side}_seg_chunk_resampled-0.35mmIso_nopad-176x144x128.nii.gz
+	     -o ${umc_atlasdir}/train0${x}/${side}_seg_chunk_resampled-0.35mmIso_nopad-176x144x128.nii.gz
     done
 done
 ##############
@@ -224,7 +242,7 @@ for side in left right ; do
     for x in {00..25} ; do 
 	#umc
 	mprage=${umc_atlasdir}/train/train0${x}/mprage_to_chunktemp_${side}.nii.gz
-	tse= ${umc_atlasdir}/train/train0${x}/tse_resampled-0.35mmIso.nii.gz
+	tse=${umc_atlasdir}/train/train0${x}/tse_native_chunk_${side}_resample_only.nii.gz
 	antsRegistrationSyNQuick.sh \
 	    -d 3 \
 	    -f ${tse} \
@@ -277,6 +295,8 @@ for x in {00..32} ; do
 	cp ${mag_atlasdir}/train0${x}/${x}_${side}_seg_chunk_resampled-0.35mmIso_nopad-176x144x128.nii.gz ${workdir}/preprocessing_output/mag_${x}_${side}_seg_chunk_resampled-0.35mmIso_nopad-176x144x128.nii.gz
     done
 done
+
+
 #full reg code if that isn't in nipype:
 #antsRegistration --dimensionality 3 --float 0 \  
 #--output [${mag_atlasdir}/train/train${x}/tse_to_umc_space_,${mag_atlasdir}/train/train${x}/tse_to_umc_space_Warped.nii.gz] \  
