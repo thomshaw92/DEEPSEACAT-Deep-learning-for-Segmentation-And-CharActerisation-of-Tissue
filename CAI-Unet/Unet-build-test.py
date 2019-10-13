@@ -28,7 +28,7 @@ if "patch_shape" in config and config["patch_shape"] is not None:       # Determ
     config["input_shape"] = tuple([config["nb_channels"]] + list(config["patch_shape"]))
 else:
     config["input_shape"] = tuple([config["nb_channels"]] + list(config["image_shape"]))
-config["dilation_block"] = True
+config["dilation_block"] = False
 config["n_dil_block"]       = 1             # Must be at least 1 lower than depth
 config["residual"]          = True
 config["dense"] = True
@@ -89,4 +89,3 @@ model = unet_model_3d(input_shape = config["input_shape"],
                       residual = config["residual"],
                       dense = config["dense"],
                       n_base_filters = config["n_base_filters"])
-
