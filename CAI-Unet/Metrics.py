@@ -6,12 +6,18 @@ Created on Tue Sep 10 16:36:06 2019
 @author: uqdlund
 """
 
+
 from functools import partial
 #import tensorflow as tf
 import scipy as sp
 import numpy as np
+import tensorflow as tf
 from keras import backend as K
 import nibabel as nib
+import os
+#os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+
+
 
 def dice_coefficient(y_true, y_pred, smooth=1.):
     y_true_f = K.flatten(y_true)
@@ -52,77 +58,60 @@ def get_label_dice_coefficient_function(label_index):
     f.__setattr__('__name__', 'label_{0}_dice_coef'.format(label_index))
     return f
 
-# Symmetric Boundary Dice implement here
-'''
-Test med samme segmentering to gange = dice 1, translater den ene lidt og pr'v igen = dice ~ 0.9
-Find kant pixels for de 'binære' objekter og lav dice på et område omkring hver af disse, summer og divider med antallet af steder det er gjort.
-repeat for den anden segmentering og ny divider    
-'''
-
-#def symmetric_boundary_dice(y_true, y_pred, neigh_radi=1):
+## Directional Boundary Dice
+## Edges found in the ground truth (y_true), Find 3x3x3 cube around these voxels
+## and compute Dice for comparison with the voxels in the SAME SPACE in the segmented result (y_pred)
+def Directional_Boundary_Dice(y_true, y_pred):
+#    y_true = y_true.get_fdata()
+#    y_pred = y_pred.get_fdata()
     
-
-
-#dice_coef = dice_coefficient
-#dice_coef_loss = dice_coefficient_loss
-path = '/afm01/Q1/Q1219/data/ashs_atlas_umcutrecht/train/train000/tse_native_chunk_left_seg.nii.gz' 
-
-seg = nib.load(path)
-
-seg_im_data = seg.get_fdata()
-seg = seg_im_data
-
-## Test purposes remove other labels except for 1 and background
-thresh_idx = seg >1
-seg_1label = seg.copy()
-seg_1label[thresh_idx] = 0
-
-#dice_results = dice_coefficient(seg_1label,seg_1label.copy())
-
-# Find edges
-imax=(sp.ndimage.maximum_filter(seg_1label,size=3)!=seg_1label)
-imin=(sp.ndimage.minimum_filter(seg_1label,size=3)!=seg_1label)
-icomb=np.logical_or(imax,imin)
-
-seg_edges = np.where(icomb,seg_1label,0)
-
-seg_edges_idx = np.argwhere(seg_edges)
-seg_ground = seg.copy()
-
-seg_subset_seg =    []
-seg_subset_ground = []
-dice_results = []
-
-
-## Currently implemented up to what is considered Directional Boundary Dice
-## Needs to be implemented for ground truth segmentation as well (essentially the other way around) 
-## edges should be found in the ground truth, Find 3x3x3 cube around these voxels
-## and compute Dice for comparison with the segmented result
-## Currently we get a dice higher than 1 ?.?
-for dA in range(len(seg_edges_idx)):
-    for i in range(-1,2):
-        seg_subset = seg[
-                     seg_edges_idx[dA][0]-1:seg_edges_idx[dA][0]+2,
-                     seg_edges_idx[dA][1]-1:seg_edges_idx[dA][1]+2,
-                     seg_edges_idx[dA][2]+i
-                     ]
-        seg_ground_subset = seg_ground[
-                     seg_edges_idx[dA][0]-1:seg_edges_idx[dA][0]+2,
-                     seg_edges_idx[dA][1]-1:seg_edges_idx[dA][1]+2,
-                     seg_edges_idx[dA][2]+i
-                     ]
-        seg_subset_seg.append(seg_subset)
-        seg_subset_ground.append(seg_subset)
-    seg_subset_seg      =   np.asarray(seg_subset_seg)
-    seg_subset_ground   =   np.asarray(seg_subset_ground)
-
-    dice_results.append(dice_coefficient(seg_subset_ground, seg_subset_seg))
+    # Find edges
+    imax=(sp.ndimage.maximum_filter(y_true,size=3)!=y_true)
+    imin=(sp.ndimage.minimum_filter(y_true,size=3)!=y_true)
+    icomb=np.logical_or(imax,imin)
     
-    seg_subset_seg = []
-    seg_subset_ground = []
+    y_true_edges = np.where(icomb,y_true,0)
+    y_true_edges_idx = np.argwhere(y_true_edges)
+    n_edge_points = len(y_true_edges_idx)
+    true_subset = []
+    pred_subset = []
+    dice_results = []
+    
+    for dA in range(len(y_true_edges_idx)):
+        for i in range(-1,2):
+            true_temp_subset = y_true[
+                         y_true_edges_idx[dA][0]-1:y_true_edges_idx[dA][0]+2,
+                         y_true_edges_idx[dA][1]-1:y_true_edges_idx[dA][1]+2,
+                         y_true_edges_idx[dA][2]+i
+                         ]
+            pred_temp_subset = y_pred[
+                         y_true_edges_idx[dA][0]-1:y_true_edges_idx[dA][0]+2,
+                         y_true_edges_idx[dA][1]-1:y_true_edges_idx[dA][1]+2,
+                         y_true_edges_idx[dA][2]+i
+                         ]
+            true_subset.append(true_temp_subset)
+            pred_subset.append(pred_temp_subset)
+        true_subset      =   np.asarray(true_subset)
+        pred_subset   =   np.asarray(pred_subset)
+    
+        dice_results.append(dice_coefficient(pred_subset, true_subset))
+        
+        true_subset = []
+        pred_subset = []
+    DBD_sum = K.sum(K.flatten(dice_results))
+    DBD = DBD_sum/n_edge_points
+    return DBD, DBD_sum, n_edge_points
+    
+# Symmetric Boundary Dice
+# Two way Directional Boundary Dice
 
-overall_dice = K.eval(K.sum(dice_results))
-#seg_f = K.flatten(seg)
-#seg2_f = K.flatten(seg)
+def Symmetric_Boundary_Dice(y_true, y_pred):
+    true_DBD, true_sum_DBD, true_n_edge_points = Directional_Boundary_Dice(y_true, y_pred)
+    pred_DBD, pred_sum_DBD, pred_n_edge_points = Directional_Boundary_Dice(y_pred, y_true)
+    
+    SBD = (true_sum_DBD+pred_sum_DBD)/(true_n_edge_points+pred_n_edge_points)
+    return SBD
 
-#intersection = K.sum(seg2_f * seg_f)
+def SBD_loss(y_true, y_pred):
+    return -Symmetric_Boundary_Dice(y_true,y_pred)
+
