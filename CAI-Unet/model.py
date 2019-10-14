@@ -78,8 +78,31 @@ def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_
     for layer_depth in range(depth):
         layer1 = create_convolution_block(input_layer=current_layer, n_filters=n_base_filters*(2**layer_depth),
                                           batch_normalization=batch_normalization)
+        
+        ## Residual and Dense implementation ##
+        
+        if residual and dense:
+                        
+            concat = concatenate([current_layer, layer1], axis=1)
+            
+            layer2 = create_convolution_block(input_layer=concat, n_filters=n_base_filters*(2**layer_depth),
+                                          batch_normalization=batch_normalization, act_man = True)
+            
+            concat = concatenate([current_layer, layer1, layer2], axis=1)
+            
+            #OBS: Det har giver fejlen 'Operands could not be broadcast together with shapes (130, 176, 144, 128) (2, 176, 144, 128)'
+            #Har proevet at fixe med nedenstaaende (og sa selvfolgelig add med norm_conv i stedet for concat), men det virker ikke rigtig
+            
+            #norm_conv = create_convolution_block(n_filters=levels[layer_depth][1]._keras_shape[1],
+                                                 #input_layer=concat, 
+                                                 #batch_normalization=batch_normalization, 
+                                                 #kernel = (1,1,1))
+            
+            layer2 = add([concat, current_layer])
+            layer2 = Activation('relu')(layer2)
+        
         ## Residual implementation ##
-        if residual and layer_depth>0:
+        elif residual and layer_depth>0:
             
             layer2 = create_convolution_block(input_layer=layer1, n_filters=n_base_filters*(2**layer_depth),
                                           batch_normalization=batch_normalization, act_man = True)
@@ -94,19 +117,6 @@ def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_
             
             layer2 = create_convolution_block(input_layer=concat, n_filters=n_base_filters*(2**layer_depth),
                                           batch_normalization=batch_normalization)
-            
-        ## Residual and Dense implementation ##
-        elif residual and dense:
-                        
-            concat = concatenate([current_layer, layer1], axis=1)
-            
-            layer2 = create_convolution_block(input_layer=concat, n_filters=n_base_filters*(2**layer_depth),
-                                          batch_normalization=batch_normalization, act_man = True)
-            
-            concat = concatenate([current_layer, layer1, layer2], axis=1) 
-            
-            layer2 = add([concat, current_layer])
-            layer2 = Activation('relu')(layer2)
             
         
         else:
@@ -142,6 +152,8 @@ def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_
             # Concatenate [layer_depth][1] since [2] is strided convolution/max-pooling
             concat = concatenate([up_convolution, levels[layer_depth][1]], axis=1)        
         
+        
+        #OBS: residual and dense skal staa foerst, naar det nedadgaaende virker
         ## Residual implementation  ##
         if residual:
             # 1x1x1 layer to normalize number of feature maps
