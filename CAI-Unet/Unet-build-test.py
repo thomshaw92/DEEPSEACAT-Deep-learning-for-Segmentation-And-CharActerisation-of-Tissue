@@ -7,11 +7,16 @@ Created on Wed Sep 11 16:41:50 2019
 
 Test to build the 3D unet model, can maybe serve as main later on.
 """
+import sys
+import os
+import glob
+sys.path.append(os.getcwd()) 
 
 from model import unet_model_3d
 from Metrics import dice_coefficient
-import os
-import glob
+
+
+
 
 # Build config dictionary that might be needed later
 config = dict()
@@ -28,10 +33,10 @@ if "patch_shape" in config and config["patch_shape"] is not None:       # Determ
     config["input_shape"] = tuple([config["nb_channels"]] + list(config["patch_shape"]))
 else:
     config["input_shape"] = tuple([config["nb_channels"]] + list(config["image_shape"]))
-config["dilation_block"] = False
+config["dilation_block"]    = False
 config["n_dil_block"]       = 1             # Must be at least 1 lower than depth
 config["residual"]          = True
-config["dense"] = True
+config["dense"]             = True
 config["truth_channel"] = config["nb_channels"]
 config["deconvolution"] = True          # if False, will use upsampling instead of deconvolution
 config["n_base_filters"] = 64

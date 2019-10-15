@@ -93,12 +93,12 @@ def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_
             #OBS: Det har giver fejlen 'Operands could not be broadcast together with shapes (130, 176, 144, 128) (2, 176, 144, 128)'
             #Har proevet at fixe med nedenstaaende (og sa selvfolgelig add med norm_conv i stedet for concat), men det virker ikke rigtig
             
-            #norm_conv = create_convolution_block(n_filters=levels[layer_depth][1]._keras_shape[1],
-                                                 #input_layer=concat, 
-                                                 #batch_normalization=batch_normalization, 
-                                                 #kernel = (1,1,1))
+            # Needs to be either concat._keras_shape[1] and input layer = current_layer
+            # OR current_layer.keras_shape[1] and input_layer = concat 
+            # This determines whether we get lots of feature maps for the next step or few (130 vs 2) for the first level, should not be a problem in later levels.
+            norm_conv = create_convolution_block(n_filters=concat._keras_shape[1],input_layer=current_layer, batch_normalization=batch_normalization, kernel = (1,1,1))
             
-            layer2 = add([concat, current_layer])
+            layer2 = add([norm_conv, concat])
             layer2 = Activation('relu')(layer2)
         
         ## Residual implementation ##
@@ -117,11 +117,12 @@ def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_
             
             layer2 = create_convolution_block(input_layer=concat, n_filters=n_base_filters*(2**layer_depth),
                                           batch_normalization=batch_normalization)
-            
-        
+            layer2 = concatenate([current_layer, layer1, layer2], axis=1)
+
         else:
             layer2 = create_convolution_block(input_layer=layer1, n_filters=n_base_filters*(2**layer_depth),
                                           batch_normalization=batch_normalization)
+            
         # for all levels except lowest, create strided convolutional layer   
         if layer_depth < depth - 1:
             # Create pooling layer --> replaced with strided convolution strides = (2,2,2)##      REMOVE +1 here depending on choice for residual ##
@@ -130,7 +131,7 @@ def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_
             
             # Keep track of layers in each level for later upsampling
             levels.append([layer1, layer2, current_layer])
-        # For last layer, do ##not## include strided convolution and just have the two normal convolutions
+        # For last layer, do ##NOT## include strided convolution and just have the two normal convolutions
         else:
             current_layer = layer2
             levels.append([layer1, layer2])
@@ -138,24 +139,48 @@ def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_
     # add levels with up-convolution (Transposed convolution) or up-sampling using 'levels' list
     # Note, backwards iteration necessary to hit correct layers, in the correct order, for concatenation
     for layer_depth in range(depth-2, -1, -1):
-        up_convolution = get_up_convolution(strided_conv_size=strided_conv_size, deconvolution=deconvolution,
-                                            n_filters=current_layer._keras_shape[1])(current_layer)
+        # NOTE that n_filters is determined by the original n_filter levels, NOT the ones that are affected by dense and residual connections
+        up_convolution = create_up_convolution(current_layer, strided_conv_size=strided_conv_size, deconvolution=deconvolution,
+                                            n_filters=levels[layer_depth][0]._keras_shape[1])
         
         ## Dilated_fusion_block ##
         # ##Legacy comment## modify for-loop here if wanted on multiple levels, should be permutable, just specify
         # >= depth - (depth-1) for all except top layer, and depth > depth-depth
         if layer_depth >= (depth-(n_dil_block+1)) and dilation_block:
-            dil_out = create_dilated_fusion_block(input_layer=levels[layer_depth][1], n_filters=levels[layer_depth][1]._keras_shape[1], layer_depth=layer_depth, dilation_depth=3)
+            dil_out = create_dilated_fusion_block(input_layer=levels[layer_depth][1], n_filters=levels[layer_depth][0]._keras_shape[1], layer_depth=layer_depth, dilation_depth=3)
             concat = concatenate([up_convolution, dil_out], axis=1)
         
         else:
-            # Concatenate [layer_depth][1] since [2] is strided convolution/max-pooling
+            # SKIP-CONNECTION # Concatenate [layer_depth][1] since [2] is strided convolution/max-pooling
             concat = concatenate([up_convolution, levels[layer_depth][1]], axis=1)        
         
         
         #OBS: residual and dense skal staa foerst, naar det nedadgaaende virker
+        ## Residual and dense implementation ##
+        if residual and dense:
+            current_layer = create_convolution_block(n_filters=levels[layer_depth][1]._keras_shape[1],
+                                                 input_layer=concat, 
+                                                 batch_normalization=batch_normalization)
+            # Dense 1
+            concat_dense = concatenate([current_layer, concat], axis=1)
+            current_layer = create_convolution_block(n_filters=levels[layer_depth][1]._keras_shape[1],
+                                                 input_layer=current_layer,
+                                                 batch_normalization=batch_normalization, act_man=True)
+            # Dense 2            
+            current_layer = concatenate([current_layer, concat, concat_dense], axis=1)
+            
+            # 1x1x1 layer to normalize number of feature maps
+            norm_conv = create_convolution_block(n_filters=concat._keras_shape[1],#levels[layer_depth][1]
+                                                 input_layer=current_layer, 
+                                                 batch_normalization=batch_normalization, 
+                                                 kernel = (1,1,1))
+            
+            current_layer = add([norm_conv, concat])
+            current_layer = Activation('relu')(current_layer)
+        
+        
         ## Residual implementation  ##
-        if residual:
+        elif residual:
             # 1x1x1 layer to normalize number of feature maps
             norm_conv = create_convolution_block(n_filters=levels[layer_depth][1]._keras_shape[1],
                                                  input_layer=concat, 
@@ -170,17 +195,24 @@ def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_
             current_layer = add([current_layer, norm_conv])
             current_layer = Activation('relu')(current_layer)
             
-            
-        ## Dense implementation ##
+        ## Dense implementation ##    
+        elif dense:
+            current_layer = create_convolution_block(n_filters=levels[layer_depth][0]._keras_shape[1],
+                                                 input_layer=concat, batch_normalization=batch_normalization)
+            # Dense 1
+            concat_dense = concatenate([current_layer, concat], axis=1)
+            current_layer = create_convolution_block(n_filters=levels[layer_depth][0]._keras_shape[1],
+                                                 input_layer=concat_dense,
+                                                 batch_normalization=batch_normalization)
+            # Dense 2
+            current_layer = concatenate([current_layer, concat, concat_dense], axis=1)
         
-        
-        ## Residual and dense implementation ##
         
         
         else:
-            current_layer = create_convolution_block(n_filters=levels[layer_depth][1]._keras_shape[1],
+            current_layer = create_convolution_block(n_filters=levels[layer_depth][0]._keras_shape[1],
                                                  input_layer=concat, batch_normalization=batch_normalization)
-            current_layer = create_convolution_block(n_filters=levels[layer_depth][1]._keras_shape[1],
+            current_layer = create_convolution_block(n_filters=levels[layer_depth][0]._keras_shape[1],
                                                  input_layer=current_layer,
                                                  batch_normalization=batch_normalization)
 
@@ -221,7 +253,7 @@ def create_convolution_block(input_layer, n_filters, batch_normalization=False, 
     if strides!=(1,1,1):
         layer = Conv3D(n_filters, kernel, padding=padding, kernel_initializer='he_normal', strides=strides, name='Strided_conv'+str(input_layer._keras_shape[1]))(input_layer)
     elif kernel!=(3,3,3):
-        layer = Conv3D(n_filters, kernel, padding=padding, kernel_initializer='he_normal', strides=strides, name='1x1x1'+str(input_layer._keras_shape[1]))(input_layer)
+        layer = Conv3D(n_filters, kernel, padding=padding, kernel_initializer='he_normal', strides=strides, name='1x1x1_'+str(input_layer._keras_shape[1]))(input_layer)
     else:
         layer = Conv3D(n_filters, kernel, padding=padding, kernel_initializer='he_normal', strides=strides)(input_layer)
     if batch_normalization:
@@ -255,17 +287,17 @@ def compute_level_output_shape(n_filters, depth, strided_conv_size, image_shape)
     return tuple([None, n_filters] + output_image_shape)
 
 
-def get_up_convolution(n_filters, strided_conv_size, kernel_size=(2, 2, 2), strides=(2, 2, 2),
+def create_up_convolution(input_layer, n_filters, strided_conv_size, kernel_size=(2, 2, 2), strides=(2, 2, 2),
                        deconvolution=False):
     '''
-    Construct upsampling block. NOTE does not perform operation as the other functions, just provides the block to do so!
+    Construct upsampling block.
     :param deconvolution: Boolean - If True use deconvolution (transposed3D convolution), if False use Upsampling (default is False)
     '''
     if deconvolution:
         return Deconvolution3D(filters=n_filters, kernel_size=kernel_size,
-                               strides=strides, kernel_initializer='he_normal', name='DeConv'+str(n_filters))
+                               strides=strides, kernel_initializer='he_normal', name='DeConv'+str(n_filters))(input_layer)
     else:
-        return UpSampling3D(size=strided_conv_size)
+        return UpSampling3D(size=strided_conv_size)(input_layer)
     
 def create_dilated_fusion_block(input_layer, n_filters, layer_depth=2, dilation_depth=3, batch_normalization=False, kernel=(3, 3, 3), activation=None,
                              padding='same', strides=(1, 1, 1), instance_normalization=False):
