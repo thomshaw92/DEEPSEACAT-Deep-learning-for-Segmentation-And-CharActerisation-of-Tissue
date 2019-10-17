@@ -97,8 +97,7 @@ for y in range(len(remain_tse_addrs)):
 
 
 #### Iterate over the train and val path lists to save the images in new lists ####
-#for i in range(len(train_tse_addrs)):
-for i in range(0,2):
+for i in range(len(train_tse_addrs)):
     train_tse.append(nibabel.load(train_tse_addrs[i]).get_fdata())
     train_mprage.append(nibabel.load(train_mprage_addrs[i]).get_fdata())
     train_seg.append(nibabel.load(train_seg_addrs[i]).get_fdata())
@@ -128,26 +127,9 @@ with (h5py.File(hdf5_train_val, mode='w')) as hfile:
     
 hfile.close()           
 
-    
-''' 
-# Open and read the hdf5 file - OBS right now we only open the tse dataset for train and val
-with h5py.File(hdf5_train_val, 'r+') as f:
-    # List all groups
-    print("Keys: %s" % f.keys())
-
-    train_img.append(np.array(f["/train/tse-"+str(i)]).astype("float"))
-
-    if i < len(val_tse_addrs):
-        val_img.append(np.array(f["/val/tse-"+str(i)]).astype("float"))
-    else:
-        pass
-
-f.close()
-'''
 
 #### Create a .h5 file for the test data and add data into three datasets (tse, mprage, seg) ####
-for j in range(0,2):
-#for j in range(len(test_tse_addrs)):
+for j in range(len(test_tse_addrs)):
         test_tse.append(np.array(nibabel.load(test_tse_addrs[j]).get_fdata()))
         test_mprage.append(nibabel.load(test_mprage_addrs[j]).get_fdata())
         test_seg.append(nibabel.load(test_seg_addrs[j]).get_fdata())
@@ -160,11 +142,3 @@ with (h5py.File(hdf5_test, mode='w')) as testhfile:
     testhfile.create_dataset("seg", data=test_seg)
     
 testhfile.close()
-
-'''    
-# Open and read the test hdf5 file - OBS right now we only open the tse test dataset
-with h5py.File(hdf5_test, 'r+') as g:
-    for k in range(len(test_tse_addrs)):
-        test_img.append(np.array(g["tse-"+str(k)]).astype("float"))
-g.close()
-'''
