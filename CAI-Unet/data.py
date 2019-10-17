@@ -6,62 +6,153 @@ Created on Thu Oct 10 11:25:27 2019
 @author: uqmtottr
 """
 
-# Function to convert the input MR images and segmentations to hpf5 files.
-
 import h5py
 import numpy as np
+import nibabel
+from glob import glob
+import random
 
-#umc_tse = 
-#umc_mprage = 
-#umc_seg = 
-arr = r'C:/Users/uqmtottr/Desktop/Images_Test_Generator/train/tse/'
+# Addresses of the hdf5 output files (train/val and test)
+hdf5_train_val = '/data/home/uqmtottr/DEEPSEACAT-Deep-learning-for-Segmentation-And-CharActerisation-of-Tissue/train_val_set.hdf5'
+hdf5_test = '/data/home/uqmtottr/DEEPSEACAT-Deep-learning-for-Segmentation-And-CharActerisation-of-Tissue/testset_hdf5.hdf5'
 
-with h5py.File('random.hdf5', 'w') as f:
-    dset = f.create_dataset("default", data=arr)
+# Addresses to data
+data_path = '/data/fastertemp/uqmtottr/data_for_network/'
+
+tse_path = glob(data_path+'tse/*.nii.gz')
+mprage_path=glob(data_path+'mprage/*.nii.gz')
+seg_path=glob(data_path+'seg/*.nii.gz')
+
+# Empty lists, which will be used when we try to open the .h5 files to check if the images are saved correct.
+train_img = []
+val_img = []
+test_img = []
+
+
+
+#### Extract 11 subjects from the total dataset for the testset and collect the remaining data in remain(tse,mprage,seg) lists. ####
+total_n_sub = list(range(len(tse_path)))
+n_test_sub = 11
+testset_sub = random.sample(total_n_sub, n_test_sub)
+testset_sub = sorted(testset_sub)
+
+# The data paths of the data for the final test will be saved in these three lists
+test_tse_addrs = []
+test_mprage_addrs = []
+test_seg_addrs = []
+
+# The data paths of the remaining data for training and validation will be saved in these three lists and later on be split into train ad val sets
+remain_tse_addrs = []
+remain_mprage_addrs = []
+remain_seg_addrs = []
+
+for x in range(len(tse_path)):
+    if x in testset_sub:
+        test_tse_addrs.append(tse_path[x])
+        test_mprage_addrs.append(mprage_path[x])
+        test_seg_addrs.append(seg_path[x])
+    else:
+        remain_tse_addrs.append(tse_path[x])
+        remain_mprage_addrs.append(mprage_path[x])
+        remain_seg_addrs.append(seg_path[x])
+
+
+#### Split the remaining data into training and validation ####
+n_remain_sub = list(range(len(remain_tse_addrs)))
+n_val_sub = 11
+val_sub = random.sample(n_remain_sub, n_val_sub)
+val_sub = sorted(val_sub)
+
+# The data paths of the validation data
+val_tse_addrs = []
+val_mprage_addrs = []
+val_seg_addrs = []
+
+# The data paths of the training data
+train_tse_addrs = []
+train_mprage_addrs = []
+train_seg_addrs = []
+
+for y in range(len(remain_tse_addrs)):
+    if y in val_sub:
+        val_tse_addrs.append(remain_tse_addrs[y])
+        val_mprage_addrs.append(remain_mprage_addrs[y])
+        val_seg_addrs.append(remain_seg_addrs[y])
     
-
-#Read the data in the .hpf5 file
-with h5py.File('random.hdf5', 'r') as f:
-    data = f['default']
-    print(min(data))
-    print(max(data))
-    print(data[:15])
+    else:
+        train_tse_addrs.append(remain_tse_addrs[y])
+        train_mprage_addrs.append(remain_mprage_addrs[y])
+        train_seg_addrs.append(remain_seg_addrs[y])
 
 
-'''
-import os
-import tables
+#### Create a .h5 file for the training and validation data and add data into two groups (train, val) each with three datasets (tse, mprage, seg) ####
+for i in range(len(train_tse_addrs)):
 
-def create_data_file(out_file, n_channels, n_samples, image_shape):
-    hdf5_file = tables.open_file(out_file, mode='w')
-    filters = tables.Filters(complevel=5, complib='blosc')
-    data_shape = tuple([0, n_channels] + list(image_shape))
-    truth_shape = tuple([0, 1] + list(image_shape))
-    data_storage = hdf5_file.create_earray(hdf5_file.root, 'data', tables.Float32Atom(), shape=data_shape,
-                                           filters=filters, expectedrows=n_samples)
-    truth_storage = hdf5_file.create_earray(hdf5_file.root, 'truth', tables.UInt8Atom(), shape=truth_shape,
-                                            filters=filters, expectedrows=n_samples)
-    return hdf5_file, data_storage, truth_storage
+    # Create the hdf5 file
+    with (h5py.File(hdf5_train_val, mode='w')) as hfile:
+        # Creating the training group and its datasets and including data
+        train_tse_img = nibabel.load(train_tse_addrs[i]).get_fdata()
+        train_mprage_img = nibabel.load(train_mprage_addrs[i]).get_fdata()
+        train_seg_img = nibabel.load(train_seg_addrs[i]).get_fdata()
 
-def write_data_to_file(training_data_files, out_file, image_shape, subject_ids=None):
-    n_samples = len(training_data_files)
-    n_channels = len(training_data_files[0]) - 1
+        train_imagegroup = hfile.create_group('train')
     
-    try:
-        hdf5_file, data_storage, truth_storage = create_data_file(out_file,
-                                                                  n_channels=n_channels,
-                                                                  n_sample=n_samples,
-                                                                  image_shape=image_shape)
-    except Exception as e:
-        # If something goes wrong, delete the incomplete data file 
-        os.remove(out_file)
-        raise e
+        train_imagegroup.create_dataset("tse-"+str(i), data=train_tse_img)
+        train_imagegroup.create_dataset("mprage-"+str(i), data=train_mprage_img)
+        train_imagegroup.create_dataset("seg-"+str(i), data=train_seg_img)
+    
+        # Creating the validation group and its datasets and including data
+        if i < len(val_tse_addrs):
+            val_tse_img = nibabel.load(val_tse_addrs[i]).get_fdata()
+            val_mprage_img = nibabel.load(val_mprage_addrs[i]).get_fdata()
+            val_seg_img = nibabel.load(val_seg_addrs[i]).get_fdata()
             
-    if subject_ids:
-        hdf5_file.create_array(hdf5_file.root, 'subject_ids', obj=subject_ids)
-    hdf5_file.close()
-    return out_file
+            val_imagegroup = hfile.create_group('val')
+            
+            val_imagegroup.create_dataset("tse-"+str(i), data=val_tse_img)
+            val_imagegroup.create_dataset("mprage-"+str(i), data=val_mprage_img)
+            val_imagegroup.create_dataset("seg-"+str(i), data=val_seg_img)
+            
+        else:
+            pass
 
-def open_data_file(filename, readwrite="r"):
-    return tables.open_file(filename, readwrite)
-    '''
+    hfile.close()
+    
+    
+    # Open and read the hdf5 file - OBS right now we only open the tse dataset for train and val
+    with h5py.File(hdf5_train_val, 'r+') as f:
+        # List all groups
+        print("Keys: %s" % f.keys())
+
+        train_img.append(np.array(f["/train/tse-"+str(i)]).astype("float"))
+
+        if i < len(val_tse_addrs):
+            val_img.append(np.array(f["/val/tse-"+str(i)]).astype("float"))
+        else:
+            pass
+
+    f.close()
+    
+    
+#### Create a .h5 file for the test data and add data into three datasets (tse, mprage, seg) ####
+for j in range(len(test_tse_addrs)):
+    
+    # Create the hdf5 file
+    with (h5py.File(hdf5_test, mode='w')) as testhfile:
+        # Creating the three datasets and including data
+        test_tse_img = nibabel.load(test_tse_addrs[j]).get_fdata()
+        test_mprage_img = nibabel.load(test_mprage_addrs[j]).get_fdata()
+        test_seg_img = nibabel.load(test_seg_addrs[j]).get_fdata()
+        
+        testhfile.create_dataset("tse-"+str(j), data=test_tse_img)
+        testhfile.create_dataset("mprage-"+str(j), data=test_mprage_img)
+        testhfile.create_dataset("seg-"+str(j), data=test_seg_img)
+    
+    testhfile.close()
+    
+    # Open and read the test hdf5 file - OBS right now we only open the tse test dataset
+    with h5py.File(hdf5_test, 'r+') as g:
+    
+        test_img.append(np.array(g["tse-"+str(j)]).astype("float"))
+    
+    g.close()
