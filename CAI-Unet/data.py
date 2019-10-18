@@ -17,11 +17,11 @@ hdf5_train_val = '/winmounts/uqmtottr/uq-research/DEEPSEACAT-Q1219/data/train_va
 hdf5_test = '/winmounts/uqmtottr/uq-research/DEEPSEACAT-Q1219/data/testset_hdf5.hdf5'
 
 # Addresses to data
-data_path = '/data/fastertemp/uqmtottr/data_for_network/'
+data_path = '/winmounts/uqmtottr/uq-research/DEEPSEACAT-Q1219/data/data_for_network/'
 
-tse_path = glob(data_path+'tse/*.nii.gz')
-mprage_path=glob(data_path+'mprage/*.nii.gz')
-seg_path=glob(data_path+'seg/*.nii.gz')
+tse_path = sorted(glob(data_path+'tse/*.nii.gz'))
+mprage_path = sorted(glob(data_path+'mprage/*.nii.gz'))
+seg_path = sorted(glob(data_path+'seg/*.nii.gz'))
 
 # Empty lists, which will be used when we create the hdf5 ile and when we try to open the images in the .h5 files.
 train_tse = []
