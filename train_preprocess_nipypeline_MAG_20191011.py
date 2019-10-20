@@ -35,10 +35,10 @@ github_dir = '/data/fastertemp/uqmtottr/DEEPSEACAT_atlas/'
 #the outdir
 output_dir = 'output_dir'
 #working_dir name
-working_dir = 'Nipype_working_dir_20191014_MAG'
+working_dir = 'Nipype_working_dir_20191021_MAG_Full_Register'
 
 #other things to be set up
-side_list = ['right', 'left']
+side_list = ['left', 'right']
 subject_list = sorted(os.listdir(experiment_dir+'ashs_atlas_magdeburg/train/'))
 
 #####################
@@ -84,12 +84,41 @@ wf.connect([(infosource, selecttemplates, [('side_id','side_id')])])
 ############
 # Register the MPRAGE ---> TSE
 
+MAG_register_MPRAGE_to_MAG_native_n = MapNode(Registration(#num_threads=30,
+                                                           dimension = 3,
+                                                           float = False, #False
+                                                           interpolation = 'BSpline',
+                                                           use_histogram_matching = False, #False
+                                                           transforms = ['Rigid', 'Affine'],
+                                                           transform_parameters = [[0.2],[0.15]],
+                                                           metric = ['MI','MI'],
+                                                           metric_weight = [1]*2,
+                                                           radius_or_number_of_bins = [32, 32],
+                                                           sampling_strategy = ['Regular', 'Regular'],
+                                                           sampling_percentage = [0.25,0.25],
+                                                           number_of_iterations = [[1000,500,250,100], [1000,500,250,100]],
+                                                           convergence_threshold = [1e-6]*2,
+                                                           convergence_window_size = [10]*2,  
+                                                           shrink_factors = [[8,4,2,1],[8,4,2,1]],
+                                                           smoothing_sigmas = [[3,2,1,0],[3,2,1,0]],
+                                                           sigma_units = ['vox']*2,
+                                                           output_warped_image = 'MAG_register_MPRAGE_to_MAG_native.nii.gz'
+                                                          ), 
+                                         name = 'MAG_register_MPRAGE_to_MAG_native_n', iterfield=['fixed_image', 'moving_image'])
+
+wf.connect([(selectfiles, MAG_register_MPRAGE_to_MAG_native_n, [('mag_tse_native','fixed_image'),
+                                                                    ('mag_mprage_chunk','moving_image')
+                                                                    ])])
+
+'''
+Quick registration, for first pass.
+The run the above for second pass and extract subjects that didn't get through in first pass
 MAG_register_MPRAGE_to_MAG_native_n = MapNode(RegistrationSynQuick(transform_type = 's'), 
                          name='MAG_register_MPRAGE_to_MAG_native_n', iterfield=['moving_image','fixed_image'])
 
 wf.connect([(selectfiles, MAG_register_MPRAGE_to_MAG_native_n, [('mag_mprage_chunk','moving_image')])])
 wf.connect([(selectfiles, MAG_register_MPRAGE_to_MAG_native_n, [('mag_tse_native','fixed_image')])])
-
+'''
 
 
 
