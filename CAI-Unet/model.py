@@ -230,8 +230,8 @@ def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_
             metrics = metrics + label_wise_dice_metrics
         else:
             metrics = label_wise_dice_metrics
-
-    model.compile(optimizer=Adam(lr=initial_learning_rate), loss='binary_crossentropy', metrics=['accuracy']) #loss=dice_coefficient_loss, metrics=metrics
+                                                                                        ##### NOTE #####
+    model.compile(optimizer=Adam(lr=initial_learning_rate), loss='binary_crossentropy', metrics=metrics) #loss=dice_coefficient_loss OR 'binary_crossentropy' OR 'categorical_crossentropy', metrics=['accuracy']
     return model
 
 

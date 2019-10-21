@@ -114,4 +114,26 @@ def Symmetric_Boundary_Dice(y_true, y_pred):
 
 def SBD_loss(y_true, y_pred):
     return -Symmetric_Boundary_Dice(y_true,y_pred)
+'''
 
+
+path = '/afm01/Q1/Q1219/data/ashs_atlas_umcutrecht/train/train000/tse_native_chunk_left_seg.nii.gz' 
+
+seg = nib.load(path)
+
+seg_im_data = seg.get_fdata()
+seg = seg_im_data
+
+## Test purposes remove other labels except for 1 and background
+thresh_idx = seg >1
+seg_1label = seg.copy()
+seg_1label[thresh_idx] = 0
+seg_1label_2 = seg_1label.copy()
+seg_1label_2[:,:,0:60] = 0
+
+SBD = Symmetric_Boundary_Dice(seg_1label_2, seg_1label)
+
+f = open("Metrics_output.txt", "a")
+f.write(SBD)
+f.close()
+'''
