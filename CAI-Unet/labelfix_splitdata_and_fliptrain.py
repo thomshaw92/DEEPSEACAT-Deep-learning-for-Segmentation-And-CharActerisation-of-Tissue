@@ -12,7 +12,9 @@ import shutil
 import numpy as np
 import nibabel as nib
 
+
 data_path = '/winmounts/uqmtottr/uq-research/DEEPSEACAT-Q1219/data/data_for_network/'
+
 
 tse_path = sorted(glob(data_path+'tse/*.nii.gz'))
 mprage_path= sorted(glob(data_path+'mprage/*.nii.gz'))
@@ -24,6 +26,64 @@ test_seg_path = '/winmounts/uqmtottr/uq-research/DEEPSEACAT-Q1219/data/data_for_
 
 ###########
 # Step 1 #
+###########
+
+# Label correction #
+# As data is collected from two different data sets (UMC and MAG) the labels 
+# are numberede/positionated differently across them.
+# Therefore, this script makes sure that label number one in UMC is the same 
+# hippocampal subfield as label number one in MAG.
+# The numbers are based on the ones given in the UMC dataset as listed below. 
+# The labels in MAG that are not listed below will be set to zero to make them 
+# a part of the background.
+
+# UMC labeling, which the MAG will be corrected according to.
+# 0 = Background / Clear label
+# 1 = ERC
+# 2 = SUB
+# 3 = CA1
+# 4 = CA2
+# 5 = DG
+# 6 = CA3
+# 7 = Cyst
+# 8 = Tail
+
+### MAG segmentations ###
+# Here the numbers/positoins of the labels in the MAG are changed to match the 
+# positions in the UMC data set.
+mag_seg_path = glob(data_path+'seg/'+'*mag*'+'.nii.gz')
+mag = []
+
+for i in range(len(mag_seg_path)):
+    mag.append(nib.load(mag_seg_path[i]))
+    mag_get = mag[i].get_fdata()
+    mag_arr = np.array(mag_get)
+    x = mag_arr.copy()
+
+    x[x == 6] = 0
+    x[x == 7] = 0
+    x[x == 10] = 0
+    x[x == 11] = 0
+    x[x == 12] = 0
+    x[x == 17] = 0
+
+    x[x == 13] = 7
+    x[x == 4] = 6
+    x[x == 2] = 4
+    x[x == 8] = 2
+    x[x == 5] = 8  
+    x[x == 3] = 5
+    x[x == 1] = 3
+    x[x == 9] = 1
+
+
+    label_img = nib.Nifti1Image(x, affine=None)
+    label_file = mag_seg_path[i][mag_seg_path[i].index('seg')+4:len(mag_seg_path[i])]   
+    nib.save(label_img, data_path+'seg/'+label_file)
+
+
+###########
+# Step 2 #
 ###########
 
 # Split data into a test and train set (the train set will be split into train and val in the generator later on)
@@ -97,18 +157,3 @@ for j in range(len(train_tse_addrs)):
     nib.save(nifti_flipped_tse, os.path.join(data_path + 'tse/' + filename_flipped_tse))
     nib.save(nifti_flipped_mprage, os.path.join(data_path + 'mprage/' + filename_flipped_mprage))
     nib.save(nifti_flipped_seg, os.path.join(data_path + 'seg/' + filename_flipped_seg))
-
-'''    
-img = '/winmounts/uqmtottr/uq-research/DEEPSEACAT-Q1219/data/ashs_atlas_umcutrecht/train/train000/tse_native_chunk_left.nii.gz'
-flip_path = '/winmounts/uqmtottr/uq-research/DEEPSEACAT-Q1219/'
-
-load_img = nib.load(img)
-get_img = load_img.get_fdata()
-img_arr = np.array(get_img)
-
-flipped = img_arr[:, :, ::-1]
-
-flip_img = nib.Nifti1Image(flipped, affine=None)
-lab_file = 'flipped_image.nii.gz'
-nib.save(flip_img, os.path.join(dir_path+lab_file))
-'''
