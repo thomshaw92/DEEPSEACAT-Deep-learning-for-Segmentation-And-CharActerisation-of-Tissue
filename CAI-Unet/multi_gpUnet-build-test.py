@@ -13,20 +13,82 @@ import glob
 sys.path.append(os.getcwd()) 
 
 import tensorflow as tf
-from keras.utils import plot_model
+from keras.utils import plot_model#, multi_gpu_model
 from keras.models import load_model
-
-from model import unet_model_3d
+from keras.layers import Lambda, concatenate
+from keras import Model
 from keras.optimizers import Adam
 
+
+from model import unet_model_3d
 from Metrics import dice_coefficient_loss, get_label_dice_coefficient_function, dice_coefficient
 from utils import write_data_to_file, open_data_file, get_callbacks
 from generator import get_training_and_validation_generators
 from predict_util import run_validation_cases
 
 
+def multi_gpu_model(model, gpus):
+  if isinstance(gpus, (list, tuple)):
+    num_gpus = len(gpus)
+    target_gpu_ids = gpus
+  else:
+    num_gpus = gpus
+    target_gpu_ids = range(num_gpus)
 
-home_path = '/scratch/cai/DEEPSEACAT/data/20191023_patch32_nfilt64_batch32_dilated_lab1_8/'
+  def get_slice(data, i, parts):
+    shape = tf.shape(data)
+    batch_size = shape[:1]
+    input_shape = shape[1:]
+    step = batch_size // parts
+    if i == num_gpus - 1:
+      size = batch_size - step * i
+    else:
+      size = step
+    size = tf.concat([size, input_shape], axis=0)
+    stride = tf.concat([step, input_shape * 0], axis=0)
+    start = stride * i
+    return tf.slice(data, start, size)
+
+  all_outputs = []
+  for i in range(len(model.outputs)):
+    all_outputs.append([])
+
+  # Place a copy of the model on each GPU,
+  # each getting a slice of the inputs.
+  for i, gpu_id in enumerate(target_gpu_ids):
+    with tf.device('/gpu:%d' % gpu_id):
+      with tf.name_scope('replica_%d' % gpu_id):
+        inputs = []
+        # Retrieve a slice of the input.
+        for x in model.inputs:
+          input_shape = tuple(x.get_shape().as_list())[1:]
+          slice_i = Lambda(get_slice,
+                           output_shape=input_shape,
+                           arguments={'i': i,
+                                      'parts': num_gpus})(x)
+          inputs.append(slice_i)
+
+        # Apply model on slice
+        # (creating a model replica on the target device).
+        outputs = model(inputs)
+        if not isinstance(outputs, list):
+          outputs = [outputs]
+
+        # Save the outputs for merging back together later.
+        for o in range(len(outputs)):
+          all_outputs[o].append(outputs[o])
+
+  # Merge outputs on CPU.
+  with tf.device('/cpu:0'):
+    merged = []
+    for name, outputs in zip(model.output_names, all_outputs):
+      merged.append(concatenate(outputs,
+                                axis=0, name=name))
+    return Model(model.inputs, merged)
+
+
+
+home_path = '/scratch/cai/DEEPSEACAT/data/20191023_multi_gpu/'
 if not os.path.exists(home_path):
     os.mkdir(home_path)
 
@@ -36,24 +98,24 @@ config["depth"] = 4
 config["strided_conv_size"] = (2, 2, 2)     # Size for the strided convolutional operations
 config["image_shape"] = (176, 144, 128)     # This determines what shape the images will be cropped/resampled to.
 config["patch_shape"] = [32,32,32]                # None = Train on the whole image, switch to specific dimensions if patch extraction is needed
-config["labels"] = (1, 2, 3, 4, 5, 6, 7, 8)       # the label numbers on the input image, should the 0 label be included??
+config["labels"] = (1, 2, 3, 4, 5, 6, 7 ,8)       # the label numbers on the input image, should the 0 label be included??
 config["n_labels"] = len(config["labels"])  # Amount of labels
-config["all_modalities"] = ["tse", "mprage"]     # Declare all available modalities
+config["all_modalities"] = ["*tse*", "*mprage*"]     # Declare all available modalities
 config["training_modalities"] = config["all_modalities"]    # change this if you want to only use some of the modalities
 config["nb_channels"] = len(config["training_modalities"])  # Configures number of channels via number of modalities
 if "patch_shape" in config and config["patch_shape"] is not None:       # Determine input shape, based on patch or not
     config["input_shape"] = tuple([config["nb_channels"]] + list(config["patch_shape"]))
 else:
     config["input_shape"] = tuple([config["nb_channels"]] + list(config["image_shape"]))
-config["dilation_block"]    = True
+config["dilation_block"]    = False
 config["n_dil_block"]       = 1             # Must be at least 1 lower than depth
 config["residual"]          = True
 config["dense"]             = False
 config["truth_channel"] = config["nb_channels"]
 config["deconvolution"] = True          # if False, will use upsampling instead of deconvolution
-config["n_base_filters"] = 64   # Tested at 32, no OOM
-config["batch_size"] = 32       # Tested at 32
-config["validation_batch_size"] = 12
+config["n_base_filters"] = 16   # Tested at 32, no OOM
+config["batch_size"] = 20       # Tested at 32
+config["validation_batch_size"] = 20
 config["n_epochs"] = 10                  # cutoff the training after this many epochs
 config["patience"] = 5                  # learning rate will be reduced after this many epochs if the validation loss is not improving
 config["early_stop"] = 15               # training will be stopped after this many epochs without the validation loss improving
@@ -75,7 +137,7 @@ config["data_file"] =       os.path.join(home_path, 'train_val.hdf5')    # Typic
 config["model_file"] =      os.path.join(home_path, 'model.h5')          # If you have a model it will load model, if not it will save as this name
 config["training_file"] =   os.path.join(home_path, 'training_ids.pkl')  # Same
 config["validation_file"] = os.path.join(home_path, 'validation_ids.pkl')
-config["overwrite"] = True  # If True, will overwrite previous files. If False, will use previously written files.
+config["overwrite"] = False  # If True, will overwrite previous files. If False, will use previously written files.
 
 # Some code to fetch data #
 
@@ -86,7 +148,7 @@ def fetch_training_data_files():
     for subject_dir in glob.glob(os.path.join(config['data_path'],'*')):#os.path.join(os.path.dirname(__file__), "data", "preprocessed", "*", "*")):
         subject_files = list()
         for modality in config["training_modalities"] + ["*seg*"]:
-            subject_files.append(glob.glob(os.path.join(subject_dir, '*'+modality+'*')))
+            subject_files.append(glob.glob(os.path.join(subject_dir, modality)))
         training_data_files.append(tuple(subject_files))
     return training_data_files
 
@@ -114,7 +176,7 @@ def main(overwrite=False):
     data_file_opened = open_data_file(config["data_file"])
     
     if not overwrite and os.path.exists(config["model_file"]):
-        model = load_model(config["model_file"])
+        model = load_model(config["model_file"], {'tf' :tf})
         
     else:
         # instantiate new model
@@ -131,10 +193,13 @@ def main(overwrite=False):
                   dense = config["dense"],
                   n_base_filters = config["n_base_filters"])
 
+    parallel_model = multi_gpu_model(model, gpus=2)
+    parallel_model.compile(optimizer=Adam(lr=config['initial_learning_rate']), loss=dice_coefficient_loss, metrics=[dice_coefficient])
+    '''  
     # print summary of model to double check, as well as save image of model
     #'''
-    model.summary()
-    plot_model(model, 'model_test.png', show_shapes=True)     
+    parallel_model.summary()
+    #plot_model(model, 'model_test.png', show_shapes=True)     
     #'''
     # get training and testing generators
     train_generator, validation_generator, n_train_steps, n_validation_steps = get_training_and_validation_generators(
@@ -160,7 +225,7 @@ def main(overwrite=False):
     # run training
     # train the model:
     print('fitting model...')
-    model.fit_generator(generator=train_generator,
+    parallel_model.fit_generator(generator=train_generator,
                         steps_per_epoch=n_train_steps,
                         epochs=config['n_epochs'],
                         validation_data=validation_generator,

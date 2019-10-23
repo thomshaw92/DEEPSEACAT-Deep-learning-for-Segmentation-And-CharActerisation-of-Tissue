@@ -12,6 +12,7 @@ from keras import backend as K
 from keras.engine import Input, Model
 from keras.layers import Conv3D, UpSampling3D, Activation, BatchNormalization, PReLU, Deconvolution3D, Dropout, add
 from keras.optimizers import Adam
+from keras.utils import multi_gpu_model
 
 from Metrics import dice_coefficient_loss, get_label_dice_coefficient_function, dice_coefficient
 
@@ -230,8 +231,7 @@ def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_
             metrics = metrics + label_wise_dice_metrics
         else:
             metrics = label_wise_dice_metrics
-                                                                                        ##### NOTE #####
-    model.compile(optimizer=Adam(lr=initial_learning_rate), loss='binary_crossentropy', metrics=metrics) #loss=dice_coefficient_loss OR 'binary_crossentropy' OR 'categorical_crossentropy', metrics=['accuracy']
+    model.compile(optimizer=Adam(lr=initial_learning_rate), loss=dice_coefficient_loss, metrics=[dice_coefficient]) #loss=dice_coefficient_loss OR 'binary_crossentropy' OR 'categorical_crossentropy', metrics=['accuracy']
     return model
 
 
