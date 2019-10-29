@@ -10,11 +10,11 @@ import numpy as np
 from keras import backend as K
 import nibabel as nib
 
-y_pred = nib.load('/scratch/cai/DEEPSEACAT/data/20191028_weighted_dice/prediction/validation_case_100/prediction.nii.gz')
+y_pred = nib.load('/scratch/cai/DEEPSEACAT/data/20191023_nepoch60_patch32_nfilt64_batch32_dilated_lab1_8/prediction/validation_case_61/prediction.nii.gz')
 
-y_true = nib.load('/scratch/cai/DEEPSEACAT/data/20191028_weighted_dice/prediction/validation_case_100/truth.nii.gz')
+y_true = nib.load('/scratch/cai/DEEPSEACAT/data/20191023_nepoch60_patch32_nfilt64_batch32_dilated_lab1_8/prediction/validation_case_61/truth.nii.gz')
 
-labels = (1, 2, 3, 4, 5, 6, 7, 8)
+labels = (1, 2, 3, 4, 5, 6)
 
 
 def get_multi_class_labels(data, n_labels, labels=None):
@@ -25,18 +25,17 @@ def get_multi_class_labels(data, n_labels, labels=None):
     :param labels: integer values of the labels.
     :return: binary numpy array of shape: (n_samples, n_labels, ...)
     """
-    new_shape = [data.shape[0], n_labels] + list(data.shape[2:])
-    y = np.zeros(new_shape, np.int8)    
+    new_shape = [data.shape[0], data.shape[1], data.shape[2], n_labels]
+    y = np.zeros(new_shape, np.int32)    
     
     for label_index in range(n_labels):
         if labels is not None:
-            y[:, label_index][data[:, 0] == labels[label_index]] = 1
+            y[:,:,:, label_index][data == labels[label_index]] = 1
         else:
-            y[:, label_index][data[:, 0] == (label_index + 1)] = 1
+            y[:,:,:, label_index][data == (label_index + 1)] = 1
     return y
 
 def dice_coefficient(y_true, y_pred, smooth=1):
-    #weights = [2,2,1,20,2,12,1,6]
     y_true_f = K.flatten(y_true)
     y_pred_f = K.flatten(y_pred)
     intersection = K.sum(y_true_f * y_pred_f)
@@ -50,6 +49,9 @@ def dice_coefficient(y_true, y_pred, smooth=1):
 y_pred_im = y_pred.get_fdata()
 
 y_true_im = y_true.get_fdata()
+
+#y_true_im[y_true_im ==7] = 0
+#y_true_im[y_true_im ==8] = 0
 
 y_pred_mult = get_multi_class_labels(y_pred_im, len(labels), labels=labels)
 
