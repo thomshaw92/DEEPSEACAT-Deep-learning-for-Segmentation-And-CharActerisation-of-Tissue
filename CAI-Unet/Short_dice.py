@@ -43,13 +43,16 @@ def dice_coefficient(y_true, y_pred, smooth=1):
     return dice
 
 def label_wise_dice_coefficient(y_true, y_pred, label_index):
-    return dice_coefficient(y_true[:, label_index], y_pred[:, label_index])
+    lab_dice = [0,0,0,0,0,0,0]
+    for i in range(len(label_index)):
+        lab_dice[i] = K.eval(dice_coefficient(y_true[:,:,:,i], y_pred[:,:,:,i]))
+    return lab_dice
 
 def volume_similarity(y_true, y_pred):
     y_true_vol = [0, 0, 0, 0, 0, 0, 0]
     y_pred_vol = [0, 0, 0, 0, 0, 0, 0]
-    true_whole_vol = []
-    pred_whole_vol = []
+    true_whole_vol = [0]
+    pred_whole_vol = [0]
     vs = []    
   
     for num_of_labels in range(y_true_mult.shape[3]):
@@ -66,7 +69,7 @@ def volume_similarity(y_true, y_pred):
         vs_val = 1 - np.absolute(np.absolute(y_pred_vol[label_num]) - np.absolute(y_true_vol[label_num]))/(np.absolute(y_pred_vol[label_num]) + np.absolute(y_true_vol[label_num]))
         # The calculation of vs with a prediction of 50 mm^3 and a truth of 100 mm^3 gives a vs of 66%, which makes sence according to the calculation but how does this fit to the though of 50 being 50% of 100?
         vs.append(vs_val)
-    return vs, vs_whole_hippo
+    return vs_whole_hippo, vs
 
 ############# RUN THE THINGS #####################
 y_pred_im = y_pred.get_fdata()
@@ -77,14 +80,14 @@ y_true_im = y_true.get_fdata()
 #y_true_im[y_true_im ==8] = 0
 
 y_pred_mult = get_multi_class_labels(y_pred_im, len(labels), labels=labels)
-
 y_true_mult = get_multi_class_labels(y_true_im, len(labels), labels=labels)
 
 dice = dice_coefficient(y_true_mult, y_pred_mult)
-
 dice_label = label_wise_dice_coefficient(y_true_mult, y_pred_mult, labels)
 
 vs = volume_similarity(y_true_mult, y_pred_mult)
 
-print(K.eval(dice))
-print(vs)
+print("Overall Dice:", K.eval(dice))
+print("Dice per Label:", dice_label)
+print("Overall Volume Similarity:", vs[0])
+print("Volume Similarity per label:", vs[1])
