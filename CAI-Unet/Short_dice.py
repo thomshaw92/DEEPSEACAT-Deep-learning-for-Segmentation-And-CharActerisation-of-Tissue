@@ -20,7 +20,7 @@ vs = []
 vs_label_wise = []
 
 
-src_path = '/scratch/cai/DEEPSEACAT/data/20191030_p64_b16_noOverlap/prediction/'
+src_path = '/scratch/cai/DEEPSEACAT/data/20191030_p32_b128_depth3_dense/prediction/'
 pred_cases = sorted(glob(os.path.join(src_path, '*','prediction.nii.gz')))
 for case in pred_cases:
     y_pred.append(nib.load(case))
@@ -101,12 +101,13 @@ for i in range(len(pred_cases)):
     vs.append(vs_whole_hippo)
     vs_label_wise.append(vs_each)
 
+# Random
 dice_not_tensor = []
 for val_dice in dice:
     dice_not_tensor.append(K.eval(val_dice))
     print('cases left = ' + str(i+1))
     i -= 1
-print('mean dice :' + np.mean(dice_not_tensor))
+print('mean dice :', np.mean(dice_not_tensor))
 
 #print("Overall Dice:", K.eval(dice))
 #print("Dice per Label:", dice_label)
