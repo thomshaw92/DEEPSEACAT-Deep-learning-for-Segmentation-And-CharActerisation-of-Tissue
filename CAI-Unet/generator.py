@@ -11,7 +11,7 @@ import os
 import copy
 from random import shuffle
 import itertools
-
+from keras.utils import to_categorical
 import numpy as np
 
 from utils import pickle_dump, pickle_load
@@ -76,7 +76,7 @@ def get_training_and_validation_generators(data_file, batch_size, n_labels, trai
 #                                        augment_flip=augment_flip,
 #                                        augment_distortion_factor=augment_distortion_factor,
                                         patch_shape=patch_shape,
-                                        patch_overlap=0,
+                                        patch_overlap=validation_patch_overlap,
                                         patch_start_offset=training_patch_start_offset,
                                         skip_blank=skip_blank
 #                                        ,permute=permute
@@ -93,7 +93,7 @@ def get_training_and_validation_generators(data_file, batch_size, n_labels, trai
     num_training_steps = get_number_of_steps(get_number_of_patches(data_file, training_list, patch_shape,
                                                                    skip_blank=skip_blank,
                                                                    patch_start_offset=training_patch_start_offset,
-                                                                   patch_overlap=0), batch_size)
+                                                                   patch_overlap=validation_patch_overlap), batch_size)
     print("Number of training steps: ", num_training_steps)
 
     num_validation_steps = get_number_of_steps(get_number_of_patches(data_file, validation_list, patch_shape,
@@ -268,7 +268,8 @@ def convert_data(x_list, y_list, n_labels=1, labels=None):
     if n_labels == 1:
         y[y > 0] = 1
     elif n_labels > 1:
-        y = get_multi_class_labels(y, n_labels=n_labels, labels=labels)
+        y= get_multi_class_labels(y, n_labels=n_labels, labels=labels)
+        #y = to_categorical(y)
     return x, y
 
 
@@ -282,12 +283,17 @@ def get_multi_class_labels(data, n_labels, labels=None):
     """
     new_shape = [data.shape[0], n_labels] + list(data.shape[2:])
     y = np.zeros(new_shape, np.int8)
+    #y_weights = y.copy()
+    #weights = [2,2,1,20,2,12,1,6]
+    weights = [0.01,3,2,2,20,3,12,4]
+    
     for label_index in range(n_labels):
         if labels is not None:
-            y[:, label_index][data[:, 0] == labels[label_index]] = 1
+            #y[:, label_index][data[:, 0] == labels[label_index]] = 1
+            y[:, label_index][data[:, 0] == labels[label_index]] = weights[label_index]
         else:
             y[:, label_index][data[:, 0] == (label_index + 1)] = 1
-    return y    
+    return y 
     
     
     

@@ -88,7 +88,7 @@ def multi_gpu_model(model, gpus):
 
 
 
-home_path = '/scratch/cai/DEEPSEACAT/data/20191023_multi_gpu/'
+home_path = '/scratch/cai/DEEPSEACAT/data/20191023_multi_gpu_whole/'
 if not os.path.exists(home_path):
     os.mkdir(home_path)
 
@@ -97,10 +97,10 @@ config = dict()
 config["depth"] = 4
 config["strided_conv_size"] = (2, 2, 2)     # Size for the strided convolutional operations
 config["image_shape"] = (176, 144, 128)     # This determines what shape the images will be cropped/resampled to.
-config["patch_shape"] = [32,32,32]                # None = Train on the whole image, switch to specific dimensions if patch extraction is needed
+config["patch_shape"] = None                # None = Train on the whole image, switch to specific dimensions if patch extraction is needed
 config["labels"] = (1, 2, 3, 4, 5, 6, 7 ,8)       # the label numbers on the input image, should the 0 label be included??
 config["n_labels"] = len(config["labels"])  # Amount of labels
-config["all_modalities"] = ["*tse*", "*mprage*"]     # Declare all available modalities
+config["all_modalities"] = ["tse", "mprage"]     # Declare all available modalities
 config["training_modalities"] = config["all_modalities"]    # change this if you want to only use some of the modalities
 config["nb_channels"] = len(config["training_modalities"])  # Configures number of channels via number of modalities
 if "patch_shape" in config and config["patch_shape"] is not None:       # Determine input shape, based on patch or not
@@ -114,8 +114,8 @@ config["dense"]             = False
 config["truth_channel"] = config["nb_channels"]
 config["deconvolution"] = True          # if False, will use upsampling instead of deconvolution
 config["n_base_filters"] = 16   # Tested at 32, no OOM
-config["batch_size"] = 20       # Tested at 32
-config["validation_batch_size"] = 20
+config["batch_size"] = 18       # Tested at 32
+config["validation_batch_size"] = 100
 config["n_epochs"] = 10                  # cutoff the training after this many epochs
 config["patience"] = 5                  # learning rate will be reduced after this many epochs if the validation loss is not improving
 config["early_stop"] = 15               # training will be stopped after this many epochs without the validation loss improving
@@ -137,7 +137,7 @@ config["data_file"] =       os.path.join(home_path, 'train_val.hdf5')    # Typic
 config["model_file"] =      os.path.join(home_path, 'model.h5')          # If you have a model it will load model, if not it will save as this name
 config["training_file"] =   os.path.join(home_path, 'training_ids.pkl')  # Same
 config["validation_file"] = os.path.join(home_path, 'validation_ids.pkl')
-config["overwrite"] = False  # If True, will overwrite previous files. If False, will use previously written files.
+config["overwrite"] = True  # If True, will overwrite previous files. If False, will use previously written files.
 
 # Some code to fetch data #
 
@@ -148,7 +148,7 @@ def fetch_training_data_files():
     for subject_dir in glob.glob(os.path.join(config['data_path'],'*')):#os.path.join(os.path.dirname(__file__), "data", "preprocessed", "*", "*")):
         subject_files = list()
         for modality in config["training_modalities"] + ["*seg*"]:
-            subject_files.append(glob.glob(os.path.join(subject_dir, modality)))
+            subject_files.append(glob.glob(os.path.join(subject_dir, '*'+modality+'*')))
         training_data_files.append(tuple(subject_files))
     return training_data_files
 
@@ -180,20 +180,20 @@ def main(overwrite=False):
         
     else:
         # instantiate new model
-        #with tf.device('/cpu:0'):
-        model = unet_model_3d(input_shape = config["input_shape"], 
-                  strided_conv_size = config["strided_conv_size"],
-                  n_labels = config["n_labels"],
-                  dilation_block = config["dilation_block"],
-                  n_dil_block = config["n_dil_block"],
-                  initial_learning_rate = config["initial_learning_rate"],
-                  deconvolution = config["deconvolution"],
-                  #include_label_wise_dice_coefficients = True,
-                  residual = config["residual"],
-                  dense = config["dense"],
-                  n_base_filters = config["n_base_filters"])
+        with tf.device('/cpu:0'):
+            model = unet_model_3d(input_shape = config["input_shape"], 
+                      strided_conv_size = config["strided_conv_size"],
+                      n_labels = config["n_labels"],
+                      dilation_block = config["dilation_block"],
+                      n_dil_block = config["n_dil_block"],
+                      initial_learning_rate = config["initial_learning_rate"],
+                      deconvolution = config["deconvolution"],
+                      #include_label_wise_dice_coefficients = True,
+                      residual = config["residual"],
+                      dense = config["dense"],
+                      n_base_filters = config["n_base_filters"])
 
-    parallel_model = multi_gpu_model(model, gpus=2)
+    parallel_model = multi_gpu_model(model, gpus=4)
     parallel_model.compile(optimizer=Adam(lr=config['initial_learning_rate']), loss=dice_coefficient_loss, metrics=[dice_coefficient])
     '''  
     # print summary of model to double check, as well as save image of model
@@ -243,10 +243,11 @@ def main(overwrite=False):
 
 if __name__ == "__main__":
     main(overwrite=config["overwrite"])
-    #'''
+    '''
     prediction_dir = os.path.join(home_path, 'prediction')
     print('running validation cases...')
     run_validation_cases(validation_keys_file=config["validation_file"],
+                         GPU = True,
                          model_file=config['model_file'],
                          training_modalities=config["training_modalities"],
                          labels=config["labels"],
@@ -254,4 +255,20 @@ if __name__ == "__main__":
                          output_label_map=True,
                          custom = True,
                          output_dir=prediction_dir)
-    #'''
+    
+    custom_objects = {'dice_coefficient_loss': dice_coefficient_loss, 
+                      'dice_coefficient': dice_coefficient,
+                      'tf' : tf}
+    model = load_model(config["model_file"], custom_objects)
+    model.summary()
+    
+    import nibabel as nib
+    import numpy as np
+    tse = nib.load('/scratch/cai/DEEPSEACAT/data/data_config_flipped/020_left_flipped/flipped_tse_left.nii.gz')
+    tse = tse.get_fdata()
+    mprage = nib.load('/scratch/cai/DEEPSEACAT/data/data_config_flipped/020_left_flipped/flipped_mprage_left.nii.gz')
+    mprage = mprage.get_fdata()
+    
+    data = np.stack((tse, mprage))
+    model.predict(data)    
+    '''

@@ -12,9 +12,8 @@ from keras import backend as K
 from keras.engine import Input, Model
 from keras.layers import Conv3D, UpSampling3D, Activation, BatchNormalization, PReLU, Deconvolution3D, Dropout, add
 from keras.optimizers import Adam
-from keras.utils import multi_gpu_model
 
-from Metrics import dice_coefficient_loss, get_label_dice_coefficient_function, dice_coefficient
+from Metrics import dice_coefficient_loss, get_label_dice_coefficient_function, dice_coefficient, categorical_focal_loss
 
 K.set_image_data_format("channels_first")
 
@@ -156,7 +155,6 @@ def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_
             concat = concatenate([up_convolution, levels[layer_depth][1]], axis=1)        
         
         
-        #OBS: residual and dense skal staa foerst, naar det nedadgaaende virker
         ## Residual and dense implementation ##
         if residual and dense:
             current_layer = create_convolution_block(n_filters=levels[layer_depth][1]._keras_shape[1],
@@ -182,17 +180,18 @@ def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_
         
         ## Residual implementation  ##
         elif residual:
-            # 1x1x1 layer to normalize number of feature maps
-            norm_conv = create_convolution_block(n_filters=levels[layer_depth][1]._keras_shape[1],
-                                                 input_layer=concat, 
-                                                 batch_normalization=batch_normalization, 
-                                                 kernel = (1,1,1))
             current_layer = create_convolution_block(n_filters=levels[layer_depth][1]._keras_shape[1],
                                                  input_layer=concat, 
                                                  batch_normalization=batch_normalization)
             current_layer = create_convolution_block(n_filters=levels[layer_depth][1]._keras_shape[1],
                                                  input_layer=current_layer,
                                                  batch_normalization=batch_normalization, act_man=True)
+            # 1x1x1 layer to normalize number of feature maps
+            norm_conv = create_convolution_block(n_filters=levels[layer_depth][1]._keras_shape[1],
+                                                 input_layer=concat, 
+                                                 batch_normalization=batch_normalization, 
+                                                 kernel = (1,1,1))
+            
             current_layer = add([current_layer, norm_conv])
             current_layer = Activation('relu')(current_layer)
             
@@ -231,9 +230,9 @@ def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_
             metrics = metrics + label_wise_dice_metrics
         else:
             metrics = label_wise_dice_metrics
-    model.compile(optimizer=Adam(lr=initial_learning_rate), loss=dice_coefficient_loss, metrics=[dice_coefficient]) #loss=dice_coefficient_loss OR 'binary_crossentropy' OR 'categorical_crossentropy', metrics=['accuracy']
+    model.compile(optimizer=Adam(lr=initial_learning_rate), loss=dice_coefficient_loss, metrics=metrics) #loss=dice_coefficient_loss OR 'binary_crossentropy' OR 'categorical_crossentropy', metrics=['accuracy']
     return model
-
+# , sample_weight_mode = 'temporal'
 
 def create_convolution_block(input_layer, n_filters, batch_normalization=False, kernel=(3, 3, 3), activation=None,
                              padding='same', strides=(1, 1, 1), instance_normalization=False, act_man = False):
