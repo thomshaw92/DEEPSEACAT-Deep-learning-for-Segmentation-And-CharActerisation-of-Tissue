@@ -10,7 +10,7 @@ import os
 
 #from Unet-build-test import config
 #
-
+import tensorflow as tf
 import nibabel as nib
 import numpy as np
 import tables
@@ -19,7 +19,7 @@ from keras.models import load_model
 from utils import pickle_load
 from utils import reconstruct_from_patches, get_patch_from_3d_data, compute_patch_indices
 from Metrics import (dice_coefficient, dice_coefficient_loss,
-                            weighted_dice_coefficient_loss, weighted_dice_coefficient)
+                            weighted_dice_coefficient_loss, weighted_dice_coefficient, categorical_focal_loss)
 #from .augment import permute_data, generate_permutation_keys, reverse_permute_data
 
 
@@ -163,17 +163,25 @@ def run_validation_case(data_index, output_dir, model, data_file, training_modal
 
 
 def run_validation_cases(validation_keys_file, model_file, training_modalities, labels, hdf5_file,
-                         output_label_map=False, output_dir=".", threshold=0.5, overlap=16, custom =False
+                         output_label_map=False, output_dir=".", threshold=0.5, overlap=16, custom =False, GPU =False
                          #, permute=False
                          ):
     validation_indices = pickle_load(validation_keys_file)
     if custom:
         custom_objects = {'dice_coefficient_loss': dice_coefficient_loss, 'dice_coefficient': dice_coefficient,
                       'weighted_dice_coefficient': weighted_dice_coefficient,
-                      'weighted_dice_coefficient_loss': weighted_dice_coefficient_loss}
-        model=load_model(model_file, custom_objects=custom_objects)
+                      'weighted_dice_coefficient_loss': weighted_dice_coefficient_loss,
+                      'categorical_focal_loss': categorical_focal_loss}
+        if GPU:
+            custom_objects['tf'] = tf
+            model=load_model(model_file, custom_objects=custom_objects)
+        else:
+            model=load_model(model_file, custom_objects=custom_objects)
     else:
-        model = load_model(model_file)
+        if GPU:
+            model=load_model(model_file, {'tf' : tf})
+        else:
+            model = load_model(model_file)
     data_file = tables.open_file(hdf5_file, "r")
     for index in validation_indices:
         if 'subject_ids' in data_file.root:
