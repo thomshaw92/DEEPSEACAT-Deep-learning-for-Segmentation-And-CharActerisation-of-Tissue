@@ -9,12 +9,26 @@ Created on Tue Oct 29 10:12:50 2019
 import numpy as np
 from keras import backend as K
 import nibabel as nib
+import os
+from glob import glob
 
-y_pred = nib.load('/scratch/cai/DEEPSEACAT/data/20191030_p64_b16_noOverlap/prediction/validation_case_101/prediction.nii.gz')
+y_pred = []
+y_true = []
+dice = []
+dice_label= []
+vs = []
+vs_label_wise = []
 
 
-y_true = nib.load('/scratch/cai/DEEPSEACAT/data/20191030_p64_b16_noOverlap/prediction/validation_case_101/truth.nii.gz')
+src_path = '/scratch/cai/DEEPSEACAT/data/20191030_p64_b16_noOverlap/prediction/'
+pred_cases = sorted(glob(os.path.join(src_path, '*','prediction.nii.gz')))
+for case in pred_cases:
+    y_pred.append(nib.load(case))
+#y_pred = nib.load('/scratch/cai/DEEPSEACAT/data/20191030_p64_b16_noOverlap/prediction/validation_case_101/prediction.nii.gz')
 
+true_cases = sorted(glob(os.path.join(src_path, '*','truth.nii.gz')))
+for case in true_cases:
+    y_true.append(nib.load(case))
 labels = (1, 2, 3, 4, 5, 6, 8)
 
 def get_multi_class_labels(data, n_labels, labels=None):
@@ -72,22 +86,30 @@ def volume_similarity(y_true, y_pred):
     return vs_whole_hippo, vs
 
 ############# RUN THE THINGS #####################
-y_pred_im = y_pred.get_fdata()
+for i in range(len(pred_cases)): 
+    y_pred_im = y_pred[i].get_fdata()
+    
+    y_true_im = y_true[i].get_fdata()
+    
+    y_pred_mult = get_multi_class_labels(y_pred_im, len(labels), labels=labels)
+    y_true_mult = get_multi_class_labels(y_true_im, len(labels), labels=labels)
+    
+    dice.append(dice_coefficient(y_true_mult, y_pred_mult))
+    #dice_label.append(label_wise_dice_coefficient(y_true_mult, y_pred_mult, labels))
+    
+    vs_whole_hippo, vs_each = volume_similarity(y_true_mult, y_pred_mult)
+    vs.append(vs_whole_hippo)
+    vs_label_wise.append(vs_each)
 
-y_true_im = y_true.get_fdata()
+dice_not_tensor = []
+for val_dice in dice:
+    dice_not_tensor.append(K.eval(val_dice))
+    print('cases left = ' + str(i+1))
+    i -= 1
+print('mean dice :' + np.mean(dice_not_tensor))
 
-#y_true_im[y_true_im ==7] = 0
-#y_true_im[y_true_im ==8] = 0
+#print("Overall Dice:", K.eval(dice))
+#print("Dice per Label:", dice_label)
+print("Overall Volume Similarity:", np.mean(vs))
+print("Volume Similarity per label:", np.mean(vs_label_wise, axis =0))
 
-y_pred_mult = get_multi_class_labels(y_pred_im, len(labels), labels=labels)
-y_true_mult = get_multi_class_labels(y_true_im, len(labels), labels=labels)
-
-dice = dice_coefficient(y_true_mult, y_pred_mult)
-dice_label = label_wise_dice_coefficient(y_true_mult, y_pred_mult, labels)
-
-vs = volume_similarity(y_true_mult, y_pred_mult)
-
-print("Overall Dice:", K.eval(dice))
-print("Dice per Label:", dice_label)
-print("Overall Volume Similarity:", vs[0])
-print("Volume Similarity per label:", vs[1])
