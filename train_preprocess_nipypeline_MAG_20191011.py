@@ -13,7 +13,7 @@ from nipype.interfaces.base import (TraitedSpec,
 	                            CommandLine, 
 	                            File, 
 	                            traits)
-from nipype.interfaces.c3 import C3d
+from c3 import C3d
 from nipype.interfaces.fsl.preprocess import FLIRT
 from nipype.interfaces.utility import IdentityInterface#, Function
 from nipype.interfaces.io import SelectFiles, DataSink

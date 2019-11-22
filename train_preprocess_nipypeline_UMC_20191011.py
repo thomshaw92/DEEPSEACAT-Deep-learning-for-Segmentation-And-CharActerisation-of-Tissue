@@ -3,12 +3,8 @@
 #27/9/19
 
 import os
-from nipype.interfaces.base import (TraitedSpec,
-	                            CommandLineInputSpec, 
-	                            CommandLine, 
-	                            File, 
-	                            traits)
-from nipype.interfaces.c3 import C3d
+
+from c3 import C3d
 from nipype.interfaces.utility import IdentityInterface#, Function
 from nipype.interfaces.io import SelectFiles, DataSink
 from nipype.pipeline.engine import Workflow, Node, MapNode

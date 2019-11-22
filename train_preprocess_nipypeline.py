@@ -9,7 +9,7 @@ from nipype.interfaces.base import (TraitedSpec,
 	                            CommandLine, 
 	                            File, 
 	                            traits)
-from nipype.interfaces.c3 import C3d
+from c3 import C3d
 from nipype.interfaces.fsl.preprocess import FLIRT
 from nipype.interfaces.utility import IdentityInterface#, Function
 from nipype.interfaces.io import SelectFiles, DataSink
@@ -46,7 +46,7 @@ github_dir = '/winmounts/uqdlund/uq-research/DEEPSEACAT-Q1219/data/DEEPSEACAT_at
 #the outdir
 output_dir = 'output_dir_SS'
 #working_dir name
-working_dir = 'Nipype_working_dir_SS_LastTest'
+working_dir = 'random'
 #other things to be set up
 side_list = ['right']
 subject_list = ['train000']
