@@ -10,10 +10,10 @@ mail: dlund13@student.aau.dk - Danielramsing@gmail.com
 import numpy as np
 from keras import backend as K
 from keras.engine import Input, Model
-from keras.layers import Conv3D, UpSampling3D, Activation, BatchNormalization, Deconvolution3D, Dropout, add
+from keras.layers import Conv3D, UpSampling3D, Activation, BatchNormalization, Deconvolution3D, Dropout, add, LeakyReLU
 from keras.optimizers import Adam
 
-from metrics import dice_coefficient_loss, get_label_dice_coefficient_function, dice_coefficient
+from Model.metrics import dice_coefficient_loss, get_label_dice_coefficient_function, dice_coefficient
 
 K.set_image_data_format("channels_first")
 
@@ -99,7 +99,7 @@ def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_
             norm_conv = create_convolution_block(n_filters=concat._keras_shape[1],input_layer=current_layer, batch_normalization=batch_normalization, kernel = (1,1,1))
             
             layer2 = add([norm_conv, concat])
-            layer2 = Activation('relu')(layer2)
+            layer2 = LeakyReLU(alpha=0.2)(layer2)
         
         ## Residual implementation ##
         elif residual and layer_depth>0:
@@ -108,7 +108,7 @@ def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_
                                           batch_normalization=batch_normalization, act_man = True)
             
             layer2 = add([layer2, current_layer])
-            layer2 = Activation('relu')(layer2)
+            layer2 = LeakyReLU(alpha=0.2)(layer2)
         
         ## Dense implementation ##
         elif dense:
@@ -175,7 +175,7 @@ def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_
                                                  kernel = (1,1,1))
             
             current_layer = add([norm_conv, concat])
-            current_layer = Activation('relu')(current_layer)
+            current_layer = LeakyReLU(alpha=0.2)(current_layer)
         
         
         ## Residual implementation  ##
@@ -193,7 +193,7 @@ def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_
                                                  kernel = (1,1,1))
             
             current_layer = add([current_layer, norm_conv])
-            current_layer = Activation('relu')(current_layer)
+            current_layer = LeakyReLU(alpha=0.2)(current_layer)
             
         ## Dense implementation ##    
         elif dense:
@@ -230,7 +230,7 @@ def unet_model_3d(input_shape, strided_conv_size=(2, 2, 2), n_labels=1, initial_
             metrics = metrics + label_wise_dice_metrics
         else:
             metrics = label_wise_dice_metrics
-    model.compile(optimizer=Adam(lr=initial_learning_rate), loss=dice_coefficient_loss, metrics=metrics) #loss=dice_coefficient_loss OR 'binary_crossentropy' OR 'categorical_crossentropy', metrics=['accuracy']
+    model.compile(optimizer=Adam(lr=initial_learning_rate), loss=dice_coefficient_loss, metrics=metrics) 
     return model
 # , sample_weight_mode = 'temporal'
 
@@ -265,7 +265,7 @@ def create_convolution_block(input_layer, n_filters, batch_normalization=False, 
                               "\nTry: pip install git+https://www.github.com/farizrahman4u/keras-contrib.git")
         layer = InstanceNormalization(axis=1)(layer)
     if activation is None and act_man is False:
-        return Activation('relu')(layer)
+        return LeakyReLU(alpha=0.2)(layer)
     elif act_man is True:
         return layer
     else:
@@ -354,6 +354,6 @@ def dilated_conv(input_layer, n_filters, name='dilated_conv', dilation_rate=1, b
                               "\nTry: pip install git+https://www.github.com/farizrahman4u/keras-contrib.git")
         layer = InstanceNormalization(axis=1)(layer)
     if activation is None:
-        return Activation('relu')(layer)
+        return LeakyReLU(alpha=0.2)(layer)
     else:
         return activation()(layer)

@@ -11,11 +11,10 @@ import os
 import copy
 from random import shuffle
 import itertools
-from keras.utils import to_categorical
 import numpy as np
 
-from utils import pickle_dump, pickle_load
-from utils import compute_patch_indices, get_random_nd_index, get_patch_from_3d_data
+from Model.utils import pickle_dump, pickle_load
+from Model.utils import compute_patch_indices, get_random_nd_index, get_patch_from_3d_data
 #from .augment import augment_data, random_permutation_x_y
 
 
@@ -24,7 +23,7 @@ def get_training_and_validation_generators(data_file, batch_size, n_labels, trai
                                            #augment=False, augment_flip=True, augment_distortion_factor=0.25, 
                                            patch_shape=None,
                                            validation_patch_overlap=0, training_patch_start_offset=None,
-                                           validation_batch_size=None, skip_blank=True
+                                           validation_batch_size=None, skip_blank=True, weights = None
                                            #, permute=False
                                            ):
     """
@@ -78,7 +77,8 @@ def get_training_and_validation_generators(data_file, batch_size, n_labels, trai
                                         patch_shape=patch_shape,
                                         patch_overlap=validation_patch_overlap,
                                         patch_start_offset=training_patch_start_offset,
-                                        skip_blank=skip_blank
+                                        skip_blank=skip_blank,
+                                        weights = weights
 #                                        ,permute=permute
                                         )
     validation_generator = data_generator(data_file, validation_list,
@@ -87,7 +87,8 @@ def get_training_and_validation_generators(data_file, batch_size, n_labels, trai
                                           labels=labels,
                                           patch_shape=patch_shape,
                                           patch_overlap=validation_patch_overlap,
-                                          skip_blank=skip_blank)
+                                          skip_blank=skip_blank,
+                                          weights = weights)
 
     # Set the number of training and testing samples per epoch correctly
     num_training_steps = get_number_of_steps(get_number_of_patches(data_file, training_list, patch_shape,
@@ -106,6 +107,7 @@ def get_training_and_validation_generators(data_file, batch_size, n_labels, trai
 
 
 def get_number_of_steps(n_samples, batch_size):
+    # calculates number of steps for one epoch
     if n_samples <= batch_size:
         return n_samples
     elif np.remainder(n_samples, batch_size) == 0:
@@ -138,6 +140,7 @@ def get_validation_split(data_file, training_file, validation_file, data_split=0
 
 
 def split_list(input_list, split=0.8, shuffle_list=True):
+    # splits list into validation and training, default is 80-20 split
     if shuffle_list:
         shuffle(input_list)
     n_training = int(len(input_list) * split)
@@ -149,13 +152,16 @@ def split_list(input_list, split=0.8, shuffle_list=True):
 def data_generator(data_file, index_list, batch_size=1, n_labels=1, labels=None, 
                    #augment=False, augment_flip=True,augment_distortion_factor=0.25, 
                    patch_shape=None, patch_overlap=0, patch_start_offset=None,
-                   shuffle_index_list=True, skip_blank=True
+                   shuffle_index_list=True, skip_blank=True, weights = None
                    #, permute=False
                    ):
+    # constructs a generator object to feed data to the network concurrently
+    
     orig_index_list = index_list
     while True:
         x_list = list()
         y_list = list()
+        # create new index if patches for input
         if patch_shape:
             index_list = create_patch_index_list(orig_index_list, data_file.root.data.shape[-3:], patch_shape,
                                                  patch_overlap, patch_start_offset)
@@ -166,6 +172,7 @@ def data_generator(data_file, index_list, batch_size=1, n_labels=1, labels=None,
             shuffle(index_list)
         while len(index_list) > 0:
             index = index_list.pop()
+            # add data from file to generator
             add_data(x_list, y_list, data_file, index, 
                      #augment=augment, augment_flip=augment_flip,augment_distortion_factor=augment_distortion_factor, 
                      patch_shape=patch_shape,
@@ -173,13 +180,14 @@ def data_generator(data_file, index_list, batch_size=1, n_labels=1, labels=None,
                      #, permute=permute
                      )
             if len(x_list) == batch_size or (len(index_list) == 0 and len(x_list) > 0):
-                yield convert_data(x_list, y_list, n_labels=n_labels, labels=labels)
+                yield convert_data(x_list, y_list, n_labels=n_labels, labels=labels, weights = weights)
                 x_list = list()
                 y_list = list()
 
 
 def get_number_of_patches(data_file, index_list, patch_shape=None, patch_overlap=0, patch_start_offset=None,
                           skip_blank=True):
+    # calculate number of patches in order to calculate number of steps and creating the patch index
     if patch_shape:
         index_list = create_patch_index_list(index_list, data_file.root.data.shape[-3:], patch_shape, patch_overlap,
                                              patch_start_offset)
@@ -196,6 +204,7 @@ def get_number_of_patches(data_file, index_list, patch_shape=None, patch_overlap
 
 
 def create_patch_index_list(index_list, image_shape, patch_shape, patch_overlap, patch_start_offset=None):
+    # create patch indexing list 
     patch_index = list()
     for index in index_list:
         if patch_start_offset is not None:
@@ -252,6 +261,7 @@ def add_data(x_list, y_list, data_file, index,
 
 
 def get_data_from_file(data_file, index, patch_shape=None):
+    # retrieves data from file in order to later pass it to generator
     if patch_shape:
         index, patch_index = index
         data, truth = get_data_from_file(data_file, index, patch_shape=None)
@@ -262,18 +272,19 @@ def get_data_from_file(data_file, index, patch_shape=None):
     return x, y
 
 
-def convert_data(x_list, y_list, n_labels=1, labels=None):
+def convert_data(x_list, y_list, n_labels=1, labels=None, weights = None):
+    # convert data to individual label matrices
     x = np.asarray(x_list)
     y = np.asarray(y_list)
     if n_labels == 1:
         y[y > 0] = 1
     elif n_labels > 1:
-        y= get_multi_class_labels(y, n_labels=n_labels, labels=labels)
+        y= get_multi_class_labels(y, n_labels=n_labels, labels=labels, weights = weights)
         #y = to_categorical(y)
     return x, y
 
 
-def get_multi_class_labels(data, n_labels, labels=None):
+def get_multi_class_labels(data, n_labels, labels=None, weights = None):
     """
     Translates a label map into a set of binary labels.
     :param data: numpy array containing the label map with shape: (n_samples, 1, ...).
@@ -283,9 +294,6 @@ def get_multi_class_labels(data, n_labels, labels=None):
     """
     new_shape = [data.shape[0], n_labels] + list(data.shape[2:])
     y = np.zeros(new_shape, np.int8)
-    #y_weights = y.copy()
-    #weights = [2,2,1,20,2,12,1,6]
-    weights = [0.01,3,2,2,20,3,12,4]
     
     for label_index in range(n_labels):
         if labels is not None:

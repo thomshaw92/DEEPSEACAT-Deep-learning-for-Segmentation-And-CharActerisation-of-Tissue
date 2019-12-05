@@ -11,7 +11,7 @@ import math
 from functools import partial
 from keras.callbacks import ModelCheckpoint, CSVLogger, LearningRateScheduler, ReduceLROnPlateau, EarlyStopping
 import pickle
-
+from glob import glob
 import numpy as np
 import tables
 import collections
@@ -73,7 +73,7 @@ def create_data_file(out_file, n_channels, n_samples, image_shape):
 
 '''
 Writes image data to a file via 'reslice_image_set' which uses 'read_image_files'
-for each subject data (mprage,tse and seg), these area added to the array created in 'create_data_file' via 'add_to_storage'
+for each subject data (mprage, tse and seg), these area added to the array created in 'create_data_file' via 'add_to_storage'
 '''
 def write_image_data_to_file(image_files, data_storage, truth_storage, image_shape, n_channels, affine_storage,
                              truth_dtype=np.uint8):
@@ -93,6 +93,18 @@ def add_data_to_storage(data_storage, truth_storage, affine_storage, subject_dat
     affine_storage.append(np.asarray(affine)[np.newaxis])
 
 
+
+# Fetches filenames
+def fetch_training_data_files(data_path, modalities):
+    training_data_files = list()
+    for subject_dir in glob.glob(os.path.join(data_path,'*')):#os.path.join(os.path.dirname(__file__), "data", "preprocessed", "*", "*")):
+        subject_files = list()
+        for modality in modalities + ["*seg*"]:
+            subject_files.append(glob.glob(os.path.join(subject_dir, '*'+modality+'*')))
+        training_data_files.append(tuple(subject_files))
+    return training_data_files
+
+# uses fetched filenames to create hdf5_file via 'create_data_file'
 def write_data_to_file(training_data_files, out_file, image_shape, truth_dtype=np.uint8, subject_ids=None#,
                        #normalize=True, 
                        #crop=True
@@ -179,6 +191,7 @@ def read_image_files(image_files, label_indices=None):
 
 '''
 save and load pickle files for logging and indexing purposes
+Basically a wrapper
 '''
 def pickle_dump(item, out_file):
     with open(out_file, "wb") as opened_file:

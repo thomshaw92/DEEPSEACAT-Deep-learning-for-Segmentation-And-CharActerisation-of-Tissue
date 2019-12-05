@@ -12,21 +12,19 @@ import os
 import glob
 sys.path.append(os.getcwd()) 
 
-import tensorflow as tf
 from keras.utils import plot_model
 from keras.models import load_model
 
 
-from keras.optimizers import Adam
 
-from utils import write_data_to_file, open_data_file, get_callbacks
-from generator import get_training_and_validation_generators
-from model import unet_model_3d
+from Model.utils import fetch_training_data_files, write_data_to_file, open_data_file, get_callbacks
+from Model.generator import get_training_and_validation_generators
+from Model.model import unet_model_3d
 
 
-home_path = '/scratch/cai/DEEPSEACAT/data/20191107_base_Wconfig3' 
-if not os.path.exists(home_path):
-    os.mkdir(home_path)
+src_path = '/scratch/cai/DEEPSEACAT/data/20191107_base_Wconfig3' 
+if not os.path.exists(src_path):
+    os.mkdir(src_path)
 
 # Build config dictionary that might be needed later
 config = dict()
@@ -36,6 +34,7 @@ config["image_shape"] = (176, 144, 128)     # This determines what shape the ima
 config["patch_shape"] = [32,32,32]                # None = Train on the whole image, switch to specific dimensions if patch extraction is needed
 config["labels"] = (0, 1, 2, 3, 4, 5, 6, 8)       # the label numbers on the input image, should the 0 label be included??
 config["n_labels"] = len(config["labels"])  # Amount of labels
+config["weights"] = [0.01,3,2,2,20,3,12,4]  # subfield weights, must match number of labels or be None, note training and val Dice, won't be between 0-1 in training, but can be calculated via highest val dice from the training is equal to Short_Dice output of mean dice from validation cases
 config["all_modalities"] = ["tse", "mprage"]     # Declare all available modalities
 config["training_modalities"] = config["all_modalities"]    # change this if you want to only use some of the modalities
 config["nb_channels"] = len(config["training_modalities"])  # Configures number of channels via number of modalities
@@ -67,37 +66,14 @@ config["validation_patch_overlap"] = 0                             # if > 0, dur
 config["training_patch_start_offset"] = (12, 12, 12)                # randomly offset the first patch index by up to this offset
 config["skip_blank"] = True                                         # if True, then patches without any target will be skipped
 
-config['logging_file'] = os.path.join(home_path, 'training.log')
+config['logging_file'] = os.path.join(src_path, 'training.log')
 config['data_path'] = '/scratch/cai/DEEPSEACAT/data/data_config_flipped/'
-config["data_file"] =       os.path.join(home_path, 'train_val.hdf5')    # Typically hdf5 file 'train_val_flipped.hdf5' and 'train_val_100.hdf5'
-config["model_file"] =      os.path.join(home_path, 'model.h5')          # If you have a model it will load model, if not it will save as this name
-config["training_file"] =   os.path.join(home_path, 'training_ids.pkl')  # Same
-config["validation_file"] = os.path.join(home_path, 'validation_ids.pkl')
+config["data_file"] =       os.path.join(src_path, 'train_val.hdf5')    # Typically hdf5 file 'train_val_flipped.hdf5' and 'train_val_100.hdf5'
+config["model_file"] =      os.path.join(src_path, 'model.h5')          # If you have a model it will load model, if not it will save as this name
+config["training_file"] =   os.path.join(src_path, 'training_ids.pkl')  # Same
+config["validation_file"] = os.path.join(src_path, 'validation_ids.pkl')
 config["overwrite"] = True  # If True, will overwrite previous files. If False, will use previously written files.
 
-# Some code to fetch data #
-
-
-# Fetches filenames
-def fetch_training_data_files():
-    training_data_files = list()
-    for subject_dir in glob.glob(os.path.join(config['data_path'],'*')):#os.path.join(os.path.dirname(__file__), "data", "preprocessed", "*", "*")):
-        subject_files = list()
-        for modality in config["training_modalities"] + ["*seg*"]:
-            subject_files.append(glob.glob(os.path.join(subject_dir, '*'+modality+'*')))
-        training_data_files.append(tuple(subject_files))
-    return training_data_files
-
-
-'''
-# Some code to construct generators for training, validation and test #
-training_data_files = fetch_training_data_files()
-write_data_to_file(training_data_files, config["data_file"], image_shape=config["image_shape"])
-'''
-
-
-
-#plot_model(model, 'slurm_test.png', show_shapes=True)
 
 
 def main(overwrite=False):
@@ -105,7 +81,7 @@ def main(overwrite=False):
     # if we want to overwrite files or it doen't exist create datafile
     if overwrite or not os.path.exists(config["data_file"]):
         print('fetching data files... \n')
-        training_files = fetch_training_data_files()
+        training_files = fetch_training_data_files(config["data_path"], config["training_modalities"])
         print('writing data to file... \n')
         write_data_to_file(training_files, config["data_file"], image_shape=config["image_shape"])
         
@@ -150,7 +126,8 @@ def main(overwrite=False):
         training_patch_start_offset=config["training_patch_start_offset"],
         #permute=config["permute"],
         #augment=config["augment"],
-        skip_blank=config["skip_blank"] #,
+        skip_blank=config["skip_blank"],
+        weights = config["weights"] #,
         #augment_flip=config["flip"]
         #augment_distortion_factor=config["distort"]
         )
@@ -175,17 +152,4 @@ def main(overwrite=False):
 
 
 if __name__ == "__main__":
-    #'''
     main(overwrite=config["overwrite"])
-    #'''
-    prediction_dir = os.path.join(home_path, 'prediction')
-    print('running validation cases...')
-    run_validation_cases(validation_keys_file=config["validation_file"],
-                         model_file=config['model_file'],
-                         training_modalities=config["training_modalities"],
-                         labels=config["labels"],
-                         hdf5_file=config['data_file'],
-                         output_label_map=True,
-                         custom = True,
-                         output_dir=prediction_dir)
-    #'''
