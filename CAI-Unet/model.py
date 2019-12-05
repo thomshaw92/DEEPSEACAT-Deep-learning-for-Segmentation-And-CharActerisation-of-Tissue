@@ -10,10 +10,10 @@ mail: dlund13@student.aau.dk - Danielramsing@gmail.com
 import numpy as np
 from keras import backend as K
 from keras.engine import Input, Model
-from keras.layers import Conv3D, UpSampling3D, Activation, BatchNormalization, PReLU, Deconvolution3D, Dropout, add
+from keras.layers import Conv3D, UpSampling3D, Activation, BatchNormalization, Deconvolution3D, Dropout, add
 from keras.optimizers import Adam
 
-from Metrics import dice_coefficient_loss, get_label_dice_coefficient_function, dice_coefficient, categorical_focal_loss
+from metrics import dice_coefficient_loss, get_label_dice_coefficient_function, dice_coefficient
 
 K.set_image_data_format("channels_first")
 
