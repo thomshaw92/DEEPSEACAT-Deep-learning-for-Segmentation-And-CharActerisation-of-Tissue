@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 
 
 def construct_exclude_vector(right_exclude_vector, left_exclude_vector):
+# Constructs exclusion vector of a left and right sided array
     exclude_vector = []
     exclude_vector.append(['train'+idx for idx in right_exclude_vector])
     exclude_vector.append(['train'+idx for idx in left_exclude_vector])
@@ -23,22 +24,19 @@ def construct_exclude_vector(right_exclude_vector, left_exclude_vector):
     
 
 def reshuffle(input_dir1, input_dir2, dir_dest, exclude_vector = [[],[]]):
-    umc_tse    = 'UMC_TSE_normalised'
-    umc_mprage = 'UMC_MPRAGE_normalised'
-    umc_seg    = 'UMC_SEG_reslice_labels'
+    # Reshuffles data into a folder structure used for remaining preprocessing
+    umc = ['UMC_normalized_TSE','UMC_normalized_MPRAGE', 'UMC_reslice_labels_SEG']
     
-    mag_tse    = 'MAG_TSE_normalised'
-    mag_mprage = 'MAG_MPRAGE_normalised'
-    mag_seg    = 'MAG_SEG_reslice_labels'
+    mag = ['MAG_normalized_TSE','MAG_normalized_MPRAGE','MAG_reslice_labels_SEG']
     
+    # Sort lists
+    umc_lists = []
+    for mode in umc:
+        umc_lists.append(sorted(glob(os.path.join(input_dir1,mode,'*','*','*'))))
     
-    input_dir1_tse_list = sorted(glob(os.path.join(input_dir1,umc_tse,'*','*','*')))
-    input_dir1_mprage_list = sorted(glob(os.path.join(input_dir1,umc_mprage,'*','*','*')))
-    input_dir1_seg_list = sorted(glob(os.path.join(input_dir1,umc_seg,'*','*','*')))
-    
-    input_dir2_tse_list = sorted(glob(os.path.join(input_dir2,mag_tse,'*','*','*')))
-    input_dir2_mprage_list = sorted(glob(os.path.join(input_dir2,mag_mprage,'*','*','*')))
-    input_dir2_seg_list = sorted(glob(os.path.join(input_dir2,mag_seg,'*','*','*')))
+    mag_lists = []
+    for mode in mag:
+        mag_lists.append(sorted(glob(os.path.join(input_dir1,mode,'*','*','*'))))
     
     if not os.path.exists(dir_dest):
         os.mkdir(dir_dest)
@@ -46,53 +44,54 @@ def reshuffle(input_dir1, input_dir2, dir_dest, exclude_vector = [[],[]]):
         os.mkdir(dir_dest+'mprage/')
         os.mkdir(dir_dest+'seg/')
     
+    # Can be made neater with additional for loop and better variable naming, but eh, it's decently fast
     if not exclude_vector[0]:
-        for i in range(len(input_dir1_tse_list)):
-            if 'left' in input_dir1_tse_list[i]:
-                shutil.copy(input_dir1_tse_list[i], dir_dest+'tse/'+input_dir1_tse_list[i][input_dir1_tse_list[i].index('train')+5:input_dir1_tse_list[i].index('train')+8]+'_tse'+'_left.nii.gz')
-                shutil.copy(input_dir1_mprage_list[i], dir_dest+'mprage/'+input_dir1_mprage_list[i][input_dir1_mprage_list[i].index('train')+5:input_dir1_mprage_list[i].index('train')+8]+'_mprage'+'_left.nii.gz')
-                shutil.copy(input_dir1_seg_list[i], dir_dest+'seg/'+input_dir1_seg_list[i][input_dir1_seg_list[i].index('train')+5:input_dir1_seg_list[i].index('train')+8]+'_seg'+'_left.nii.gz')
-            elif 'right' in input_dir1_tse_list[i]:
-                shutil.copy(input_dir1_tse_list[i], dir_dest+'tse/'+input_dir1_tse_list[i][input_dir1_tse_list[i].index('train')+5:input_dir1_tse_list[i].index('train')+8]+'_tse'+'_right.nii.gz')
-                shutil.copy(input_dir1_mprage_list[i], dir_dest+'mprage/'+input_dir1_mprage_list[i][input_dir1_mprage_list[i].index('train')+5:input_dir1_mprage_list[i].index('train')+8]+'_mprage'+'_right.nii.gz')
-                shutil.copy(input_dir1_seg_list[i], dir_dest+'seg/'+input_dir1_seg_list[i][input_dir1_seg_list[i].index('train')+5:input_dir1_seg_list[i].index('train')+8]+'_seg'+'_right.nii.gz')
+        for i in range(len(umc_lists[0])):
+            if 'left' in umc_lists[0][i]:
+                shutil.copy(umc_lists[0][i], dir_dest+'tse/'+umc_lists[0][i][umc_lists[0][i].index('train')+5:umc_lists[0][i].index('train')+8]+'_tse'+'_left.nii.gz')
+                shutil.copy(umc_lists[1][i], dir_dest+'mprage/'+umc_lists[1][i][umc_lists[1][i].index('train')+5:umc_lists[1][i].index('train')+8]+'_mprage'+'_left.nii.gz')
+                shutil.copy(umc_lists[2][i], dir_dest+'seg/'+umc_lists[2][i][umc_lists[2][i].index('train')+5:umc_lists[2][i].index('train')+8]+'_seg'+'_left.nii.gz')
+            elif 'right' in umc_lists[0][i]:
+                shutil.copy(umc_lists[0][i], dir_dest+'tse/'+umc_lists[0][i][umc_lists[0][i].index('train')+5:umc_lists[0][i].index('train')+8]+'_tse'+'_right.nii.gz')
+                shutil.copy(umc_lists[1][i], dir_dest+'mprage/'+umc_lists[1][i][umc_lists[1][i].index('train')+5:umc_lists[1][i].index('train')+8]+'_mprage'+'_right.nii.gz')
+                shutil.copy(umc_lists[2][i], dir_dest+'seg/'+umc_lists[2][i][umc_lists[2][i].index('train')+5:umc_lists[2][i].index('train')+8]+'_seg'+'_right.nii.gz')
     else:
-        for i in range(len(input_dir1_tse_list)):
-            if 'left' in input_dir1_tse_list[i] and not any([temp in input_dir1_tse_list[i] for temp in exclude_vector[0][1]]):
-                shutil.copy(input_dir1_tse_list[i], dir_dest+'tse/'+input_dir1_tse_list[i][input_dir1_tse_list[i].index('train')+5:input_dir1_tse_list[i].index('train')+8]+'_tse'+'_left.nii.gz')
-                shutil.copy(input_dir1_mprage_list[i], dir_dest+'mprage/'+input_dir1_mprage_list[i][input_dir1_mprage_list[i].index('train')+5:input_dir1_mprage_list[i].index('train')+8]+'_mprage'+'_left.nii.gz')
-                shutil.copy(input_dir1_seg_list[i], dir_dest+'seg/'+input_dir1_seg_list[i][input_dir1_seg_list[i].index('train')+5:input_dir1_seg_list[i].index('train')+8]+'_seg'+'_left.nii.gz')
-            elif 'right' in input_dir1_tse_list[i] and not any([temp in input_dir1_tse_list[i] for temp in exclude_vector[0][0]]):
-                shutil.copy(input_dir1_tse_list[i], dir_dest+'tse/'+input_dir1_tse_list[i][input_dir1_tse_list[i].index('train')+5:input_dir1_tse_list[i].index('train')+8]+'_tse'+'_right.nii.gz')
-                shutil.copy(input_dir1_mprage_list[i], dir_dest+'mprage/'+input_dir1_mprage_list[i][input_dir1_mprage_list[i].index('train')+5:input_dir1_mprage_list[i].index('train')+8]+'_mprage'+'_right.nii.gz')
-                shutil.copy(input_dir1_seg_list[i], dir_dest+'seg/'+input_dir1_seg_list[i][input_dir1_seg_list[i].index('train')+5:input_dir1_seg_list[i].index('train')+8]+'_seg'+'_right.nii.gz')
+        for i in range(len(umc_lists[0])):
+            if 'left' in umc_lists[0][i] and not any([temp in umc_lists[0][i] for temp in exclude_vector[0][1]]):
+                shutil.copy(umc_lists[0][i], dir_dest+'tse/'+umc_lists[0][i][umc_lists[0][i].index('train')+5:umc_lists[0][i].index('train')+8]+'_tse'+'_left.nii.gz')
+                shutil.copy(umc_lists[1][i], dir_dest+'mprage/'+umc_lists[1][i][umc_lists[1][i].index('train')+5:umc_lists[1][i].index('train')+8]+'_mprage'+'_left.nii.gz')
+                shutil.copy(umc_lists[2][i], dir_dest+'seg/'+umc_lists[2][i][umc_lists[2][i].index('train')+5:umc_lists[2][i].index('train')+8]+'_seg'+'_left.nii.gz')
+            elif 'right' in umc_lists[0][i] and not any([temp in umc_lists[0][i] for temp in exclude_vector[0][0]]):
+                shutil.copy(umc_lists[0][i], dir_dest+'tse/'+umc_lists[0][i][umc_lists[0][i].index('train')+5:umc_lists[0][i].index('train')+8]+'_tse'+'_right.nii.gz')
+                shutil.copy(umc_lists[1][i], dir_dest+'mprage/'+umc_lists[1][i][umc_lists[1][i].index('train')+5:umc_lists[1][i].index('train')+8]+'_mprage'+'_right.nii.gz')
+                shutil.copy(umc_lists[2][i], dir_dest+'seg/'+umc_lists[2][i][umc_lists[2][i].index('train')+5:umc_lists[2][i].index('train')+8]+'_seg'+'_right.nii.gz')
         
         
     if not exclude_vector[1]:
-        for i in range(len(input_dir2_tse_list)):
-            if 'left' in input_dir2_tse_list[i]:
-                shutil.copy(input_dir2_tse_list[i], dir_dest+'tse/0'+str(int(input_dir2_tse_list[i][input_dir2_tse_list[i].index('train')+5:input_dir2_tse_list[i].index('train')+8])+int(len(input_dir1_tse_list)/2))+'_mag_tse'+'_left.nii.gz')
-                shutil.copy(input_dir2_mprage_list[i], dir_dest+'mprage/0'+str(int(input_dir2_mprage_list[i][input_dir2_mprage_list[i].index('train')+5:input_dir2_mprage_list[i].index('train')+8])+int(len(input_dir1_tse_list)/2))+'_mag_mprage'+'_left.nii.gz')
-                shutil.copy(input_dir2_seg_list[i], dir_dest+'seg/0'+str(int(input_dir2_seg_list[i][input_dir2_seg_list[i].index('train')+5:input_dir2_seg_list[i].index('train')+8])+int(len(input_dir1_tse_list)/2))+'_mag_seg'+'_left.nii.gz')
-            if 'right' in input_dir2_tse_list[i]:#right_vector_orig in input_dir2_tse_list[i]:
-                shutil.copy(input_dir2_tse_list[i], dir_dest+'tse/0'+str(int(input_dir2_tse_list[i][input_dir2_tse_list[i].index('train')+5:input_dir2_tse_list[i].index('train')+8])+int(len(input_dir1_tse_list)/2))+'_mag_tse'+'_right.nii.gz')
-                shutil.copy(input_dir2_mprage_list[i], dir_dest+'mprage/0'+str(int(input_dir2_mprage_list[i][input_dir2_mprage_list[i].index('train')+5:input_dir2_mprage_list[i].index('train')+8])+int(len(input_dir1_tse_list)/2))+'_mag_mprage'+'_right.nii.gz')
-                shutil.copy(input_dir2_seg_list[i], dir_dest+'seg/0'+str(int(input_dir2_seg_list[i][input_dir2_seg_list[i].index('train')+5:input_dir2_seg_list[i].index('train')+8])+int(len(input_dir1_tse_list)/2))+'_mag_seg'+'_right.nii.gz')
+        for i in range(len(mag_lists[0])):
+            if 'left' in mag_lists[0][i]:
+                shutil.copy(mag_lists[0][i], dir_dest+'tse/0'+str(int(mag_lists[0][i][mag_lists[0][i].index('train')+5:mag_lists[0][i].index('train')+8])+int(len(umc_lists[0])/2))+'_mag_tse'+'_left.nii.gz')
+                shutil.copy(mag_lists[1][i], dir_dest+'mprage/0'+str(int(mag_lists[1][i][mag_lists[1][i].index('train')+5:mag_lists[1][i].index('train')+8])+int(len(umc_lists[0])/2))+'_mag_mprage'+'_left.nii.gz')
+                shutil.copy(mag_lists[2][i], dir_dest+'seg/0'+str(int(mag_lists[2][i][mag_lists[2][i].index('train')+5:mag_lists[2][i].index('train')+8])+int(len(umc_lists[0])/2))+'_mag_seg'+'_left.nii.gz')
+            if 'right' in mag_lists[0][i]:#right_vector_orig in mag_lists[0][i]:
+                shutil.copy(mag_lists[0][i], dir_dest+'tse/0'+str(int(mag_lists[0][i][mag_lists[0][i].index('train')+5:mag_lists[0][i].index('train')+8])+int(len(umc_lists[0])/2))+'_mag_tse'+'_right.nii.gz')
+                shutil.copy(mag_lists[1][i], dir_dest+'mprage/0'+str(int(mag_lists[1][i][mag_lists[1][i].index('train')+5:mag_lists[1][i].index('train')+8])+int(len(umc_lists[0])/2))+'_mag_mprage'+'_right.nii.gz')
+                shutil.copy(mag_lists[2][i], dir_dest+'seg/0'+str(int(mag_lists[2][i][mag_lists[2][i].index('train')+5:mag_lists[2][i].index('train')+8])+int(len(umc_lists[0])/2))+'_mag_seg'+'_right.nii.gz')
     else:
-        for i in range(len(input_dir2_tse_list)):
-            if 'left' in input_dir2_tse_list[i] and not any([temp in input_dir2_tse_list[i] for temp in exclude_vector[1][1]]):
-                shutil.copy(input_dir2_tse_list[i], dir_dest+'tse/0'+str(int(input_dir2_tse_list[i][input_dir2_tse_list[i].index('train')+5:input_dir2_tse_list[i].index('train')+8])+int(len(input_dir1_tse_list)/2))+'_mag_tse'+'_left.nii.gz')
-                shutil.copy(input_dir2_mprage_list[i], dir_dest+'mprage/0'+str(int(input_dir2_mprage_list[i][input_dir2_mprage_list[i].index('train')+5:input_dir2_mprage_list[i].index('train')+8])+int(len(input_dir1_tse_list)/2))+'_mag_mprage'+'_left.nii.gz')
-                shutil.copy(input_dir2_seg_list[i], dir_dest+'seg/0'+str(int(input_dir2_seg_list[i][input_dir2_seg_list[i].index('train')+5:input_dir2_seg_list[i].index('train')+8])+int(len(input_dir1_tse_list)/2))+'_mag_seg'+'_left.nii.gz')
-            if 'right' in input_dir2_tse_list[i] and not any([temp in input_dir2_tse_list[i] for temp in exclude_vector[1][0]]):
-                shutil.copy(input_dir2_tse_list[i], dir_dest+'tse/0'+str(int(input_dir2_tse_list[i][input_dir2_tse_list[i].index('train')+5:input_dir2_tse_list[i].index('train')+8])+int(len(input_dir1_tse_list)/2))+'_mag_tse'+'_right.nii.gz')
-                shutil.copy(input_dir2_mprage_list[i], dir_dest+'mprage/0'+str(int(input_dir2_mprage_list[i][input_dir2_mprage_list[i].index('train')+5:input_dir2_mprage_list[i].index('train')+8])+int(len(input_dir1_tse_list)/2))+'_mag_mprage'+'_right.nii.gz')
-                shutil.copy(input_dir2_seg_list[i], dir_dest+'seg/0'+str(int(input_dir2_seg_list[i][input_dir2_seg_list[i].index('train')+5:input_dir2_seg_list[i].index('train')+8])+int(len(input_dir1_tse_list)/2))+'_mag_seg'+'_right.nii.gz')
+        for i in range(len(mag_lists[0])):
+            if 'left' in mag_lists[0][i] and not any([temp in mag_lists[0][i] for temp in exclude_vector[1][1]]):
+                shutil.copy(mag_lists[0][i], dir_dest+'tse/0'+str(int(mag_lists[0][i][mag_lists[0][i].index('train')+5:mag_lists[0][i].index('train')+8])+int(len(umc_lists[0])/2))+'_mag_tse'+'_left.nii.gz')
+                shutil.copy(mag_lists[1][i], dir_dest+'mprage/0'+str(int(mag_lists[1][i][mag_lists[1][i].index('train')+5:mag_lists[1][i].index('train')+8])+int(len(umc_lists[0])/2))+'_mag_mprage'+'_left.nii.gz')
+                shutil.copy(mag_lists[2][i], dir_dest+'seg/0'+str(int(mag_lists[2][i][mag_lists[2][i].index('train')+5:mag_lists[2][i].index('train')+8])+int(len(umc_lists[0])/2))+'_mag_seg'+'_left.nii.gz')
+            if 'right' in mag_lists[0][i] and not any([temp in mag_lists[0][i] for temp in exclude_vector[1][0]]):
+                shutil.copy(mag_lists[0][i], dir_dest+'tse/0'+str(int(mag_lists[0][i][mag_lists[0][i].index('train')+5:mag_lists[0][i].index('train')+8])+int(len(umc_lists[0])/2))+'_mag_tse'+'_right.nii.gz')
+                shutil.copy(mag_lists[1][i], dir_dest+'mprage/0'+str(int(mag_lists[1][i][mag_lists[1][i].index('train')+5:mag_lists[1][i].index('train')+8])+int(len(umc_lists[0])/2))+'_mag_mprage'+'_right.nii.gz')
+                shutil.copy(mag_lists[2][i], dir_dest+'seg/0'+str(int(mag_lists[2][i][mag_lists[2][i].index('train')+5:mag_lists[2][i].index('train')+8])+int(len(umc_lists[0])/2))+'_mag_seg'+'_right.nii.gz')
  
 
 def label_reorder(data_path):
     '''
-    Run only this function once, as it will overwrite the wrong labels otherwise
+    Run only once, as it will overwrite the wrong labels otherwise || can be made safe by checking if all mag_array[mag_arr == to_zero] return empty indices
     Label correction of the MAG data set
     As data is collected from two different data sets (UMC and MAG) the labels are numberede/positionated differently.
     The numbers are based on the ones given in the UMC dataset as listed below. 
@@ -109,40 +108,38 @@ def label_reorder(data_path):
     8 = Tail
     '''
     mag_seg = glob(data_path+'seg/'+'*mag*'+'.nii.gz')
-    mag = []
 
+    # target vectors
+    to_zero = [6,7,10,11,12,17]
+    # necessary order for forloop not to overwrite existing labels
+    to_change = [13,4,2,8,5,3,1,9]
+    change_target = [7,6,4,2,8,5,3,1]
+    
     for i in range(len(mag_seg)):
-        mag.append(nib.load(mag_seg[i]))
-        mag_arr = mag[i].get_fdata()
+        mag_arr = (nib.load(mag_seg[i])).get_fdata()
         
-        mag_arr[mag_arr == 6] = 0
-        mag_arr[mag_arr == 7] = 0
-        mag_arr[mag_arr == 10] = 0
-        mag_arr[mag_arr == 11] = 0
-        mag_arr[mag_arr == 12] = 0
-        mag_arr[mag_arr == 17] = 0
+        # set unnecessary labels to zero
+        for label in to_zero:
+            mag_arr[mag_arr == label] = 0
+        
+        # Change to UMC labels
+        for j in range(len(to_change)):
+            mag_arr[mag_arr == to_change[j]] = change_target[j]
 
-        mag_arr[mag_arr == 13] = 7 
-        mag_arr[mag_arr == 4] = 6
-        mag_arr[mag_arr == 2] = 4
-        mag_arr[mag_arr == 8] = 2
-        mag_arr[mag_arr == 5] = 8  
-        mag_arr[mag_arr == 3] = 5
-        mag_arr[mag_arr == 1] = 3
-        mag_arr[mag_arr == 9] = 1
-
-
+        # overwrite old segmentation with new, through Nibabel
         label_img = nib.Nifti1Image(mag_arr, affine=None)
         label_file = mag_seg[i][mag_seg[i].index('seg')+4:len(mag_seg[i])]   
-        nib.save(label_img, data_path+'seg/'+label_file)
+        nib.save(label_img, data_path+'seg/'+label_file) # second argument could just be mag_seg[i] I believe
 
 
 def data_split(data_path,data_dest):
     '''
-    Run only this function once, as the test set will be overwritten otherwise.
+    Run only once, as the test set will be overwritten otherwise.
     Split data into a test (10%) and train (90%) set (the train set will be split into train and validation later on)
     The data is extracted and saved in new lists test/train_.._addrs
     '''
+    
+    # Define paths
     tse = sorted(glob(data_path + 'tse/*.nii.gz'))
     mprage = sorted(glob(data_path + 'mprage/*.nii.gz'))
     seg = sorted(glob(data_path + 'seg/*.nii.gz'))
@@ -152,6 +149,7 @@ def data_split(data_path,data_dest):
     test_mprage = os.path.join(data_dest, 'test/mprage/')
     test_seg = os.path.join(data_dest, 'test/seg/')
 
+    # make dirs if not done already
     if not os.path.exists(data_dest):
         os.mkdir(data_dest)
     if not os.path.exists(test):
@@ -160,7 +158,7 @@ def data_split(data_path,data_dest):
             os.mkdir(type)
     
     n_sub = list(range(len(tse))) #The lenght of tse, mprage and seg paths are the same, so here we just use tse
-    testset_sub = sorted(random.sample(n_sub, round(len(tse)*0.1)))
+    testset_sub = sorted(random.sample(n_sub, round(len(tse)*0.1))) # extract 10 % of all data for test
 
     test_tse_addrs = []
     test_mprage_addrs = []
@@ -169,6 +167,7 @@ def data_split(data_path,data_dest):
     train_mprage_addrs = []
     train_seg_addrs = []
 
+    # Separate the extracted test samples to respective types
     for i in range(len(tse)):
         if i in testset_sub:
             test_tse_addrs.append(tse[i])
@@ -192,7 +191,7 @@ def label_distribution(data_path):
     Calculation of the volume deviation of each label based on the manual segmentations
     The volume is calculated in mm based on the resolution set in the nipype preprocessing (voxel resolution = 0.35 mm^3 iso)
     Each subfield is divided by the total hippocampal volume of all subjects to get a proportion (% of hippocampus volume)
-    A subplot is generated to visualize the label proportion og the hippocampal volume.
+    A subplot is generated to visualize the label proportion of the hippocampal volume.
     '''  
     segmentations = glob(data_path + 'seg/*.nii.gz')
     seg = []
@@ -208,13 +207,13 @@ def label_distribution(data_path):
         lab.append(temp)
     
     lab = np.asarray(lab)
-    lab_vol = lab*0.35**3
+    lab_vol = lab*0.35**3 # to mm resolution
     
     hippo_volumes = []
     lab_proportions = []
     for sub in range(len(segmentations)):
         hippo_volumes.append(sum(lab_vol[sub,:]))
-        lab_proportions.append(lab_vol[sub,:]/hippo_volumes[sub])
+        lab_proportions.append(lab_vol[sub,:]/hippo_volumes[sub]) # relative/proportional size
     lab_proportions = np.asarray(lab_proportions)
     
     box_plot_data=[lab_proportions[:,0], lab_proportions[:,1], lab_proportions[:,2], lab_proportions[:,3], lab_proportions[:,4], lab_proportions[:,5], lab_proportions[:,6]]
@@ -238,8 +237,7 @@ def flip_traindata(train_tse_addrs, train_mprage_addrs, train_seg_addrs, data_pa
     addresses =[train_tse_addrs, train_mprage_addrs, train_seg_addrs]
     for j in range(len(addresses[0])):
         for address in addresses:
-            img_load = nib.load(address[j])
-            img_arr = np.array(img_load.get_fdata())
+            img_arr = (nib.load(address[j])).get_fdata()
             img_flip = img_arr[:, :, ::-1]
             nifti_img = nib.Nifti1Image(img_flip, affine = None)
             
@@ -255,10 +253,15 @@ def flip_traindata(train_tse_addrs, train_mprage_addrs, train_seg_addrs, data_pa
                
                 
 def rearrange(src_path, dest_path, targets =['tse','mprage','seg'], flipped = True):
-     if not os.path.exists(dest_path):
+    '''
+    Final rearrange of data, to a form the generator in the network expects
+    splits data into subjects with respective targets in each subject folder (default is [tse,mprageg, seg])
+    If flipped = True, then it will look for flipped images as well and name them accordingly, default is True
+    '''
+    if not os.path.exists(dest_path):
         os.mkdir(dest_path)
 
-     for im_type in targets:
+    for im_type in targets:
         array = sorted(os.listdir(os.path.join(src_path,im_type)))
         list_ = []
         
