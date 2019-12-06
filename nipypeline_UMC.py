@@ -3,7 +3,8 @@
 #27/9/19
 
 import os
-from c3 import C3d
+from Model.config import src_path
+from Preprocessing.c3 import C3d
 from nipype.interfaces.utility import IdentityInterface#, Function
 from nipype.interfaces.io import SelectFiles, DataSink
 from nipype.pipeline.engine import Workflow, Node, MapNode
@@ -11,8 +12,6 @@ from nipype.interfaces.ants import RegistrationSynQuick
 
 os.environ["FSLOUTPUTTYPE"] = "NIFTI_GZ"
 
-#setup for Workstations
-src_path = '/scratch/cai/DEEPSEACAT/'
 #where all the atlases live
 atlas_dir = os.path.join(os.getcwd(),'DEEPSEACAT_atlas')
 ##############
