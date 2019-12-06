@@ -17,9 +17,8 @@ import tables
 
 
 from keras.models import load_model
-from utils import pickle_load
-from utils import reconstruct_from_patches, get_patch_from_3d_data, compute_patch_indices
-from Metrics import (dice_coefficient, dice_coefficient_loss,
+from Model.utils import pickle_load, reconstruct_from_patches, get_patch_from_3d_data, compute_patch_indices
+from Model.metrics import (dice_coefficient, dice_coefficient_loss,
                             weighted_dice_coefficient_loss, weighted_dice_coefficient)
 #from .augment import permute_data, generate_permutation_keys, reverse_permute_data
 

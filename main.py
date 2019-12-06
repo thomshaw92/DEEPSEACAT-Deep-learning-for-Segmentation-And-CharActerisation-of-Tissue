@@ -19,7 +19,7 @@ from Model.generator import get_training_and_validation_generators
 from Model.model import unet_model_3d
 from Model.config import config
 
-########################### Make changes to the model in Model.config #########################################
+########################### Make changes to the model in Model.config and Model.model #########################################
 
 def main(overwrite=False):
     # convert input images into an hdf5 file

@@ -10,11 +10,10 @@ Test to build the 3D unet model, can maybe serve as main later on.
 import sys
 import os
 sys.path.append(os.getcwd()) 
-
-from utils import write_data_to_file
+ 
 from Model.config import config, src_path
-from Model.utils import fetch_training_data_files
-from Pred.predict_util import run_validation_cases, 
+from Model.utils import fetch_training_data_files, write_data_to_file
+from Pred.predict_util import run_validation_cases
 from Pred.post_proc_util import Connected_components, Performance_metrics
 
 # If you're not testing different stuff, you can just import all these configs from Model.config, model_file and labels are both loaded from config
