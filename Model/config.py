@@ -8,8 +8,8 @@ Created on Fri Dec  6 11:29:31 2019
 
 import os
 
-src_path = '/scratch/cai/DEEPSEACAT/data/'
-model_path = os.path.join(src_path, '20191107_leaky_ReLu')
+src_path = '/scratch/cai/tom_shaw/'
+model_path = os.path.join(src_path, '20200717_leaky_ReLu')
 if not os.path.exists(src_path):
     os.mkdir(src_path)
     if not os.path.exists(model_path):
@@ -56,7 +56,7 @@ config["training_patch_start_offset"] = (12, 12, 12)                # randomly o
 config["skip_blank"] = True                                         # if True, then patches without any target will be skipped
 
 config['logging_file'] = os.path.join(src_path, 'training.log')
-config['data_path'] = '/scratch/cai/DEEPSEACAT/data/data_config_flipped/'
+config['data_path'] = '/scratch/cai/tom_shaw/data/data_config_flipped/'
 config["data_file"] =       os.path.join(src_path, 'train_val.hdf5')    # Typically hdf5 file
 config["model_file"] =      os.path.join(src_path, 'model.h5')          # If you have a model it will load model, if not it will save as this name
 config["training_file"] =   os.path.join(src_path, 'training_ids.pkl')  # Same
