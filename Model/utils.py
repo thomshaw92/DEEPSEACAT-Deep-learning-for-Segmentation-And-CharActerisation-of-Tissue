@@ -97,10 +97,10 @@ def add_data_to_storage(data_storage, truth_storage, affine_storage, subject_dat
 # Fetches filenames
 def fetch_training_data_files(data_path, modalities):
     training_data_files = list()
-    for subject_dir in glob.glob(os.path.join(data_path,'*')):#os.path.join(os.path.dirname(__file__), "data", "preprocessed", "*", "*")):
+    for subject_dir in glob(os.path.join(data_path,'*')): #os.path.join(os.path.dirname(__file__), "data", "preprocessed", "*", "*")):
         subject_files = list()
         for modality in modalities + ["*seg*"]:
-            subject_files.append(glob.glob(os.path.join(subject_dir, '*'+modality+'*')))
+            subject_files.append(glob(os.path.join(subject_dir, '*'+modality+'*')))
         training_data_files.append(tuple(subject_files))
     return training_data_files
 
