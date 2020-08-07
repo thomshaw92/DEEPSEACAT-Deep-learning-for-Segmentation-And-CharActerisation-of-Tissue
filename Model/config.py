@@ -9,7 +9,7 @@ Created on Fri Dec  6 11:29:31 2019
 import os
 
 src_path = '/scratch/cai/tom_shaw/'
-model_path = os.path.join(src_path, '20200717_leaky_ReLu')
+model_path = os.path.join(src_path, '20200723_leaky_ReLu')
 if not os.path.exists(src_path):
     os.mkdir(src_path)
     if not os.path.exists(model_path):

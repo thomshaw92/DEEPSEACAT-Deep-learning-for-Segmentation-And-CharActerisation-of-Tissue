@@ -60,13 +60,19 @@ Creates data_file with 3 arrays, data, truth and affine
 '''
 def create_data_file(out_file, n_channels, n_samples, image_shape):
     hdf5_file = tables.open_file(out_file, mode='w')
+    print("DEBUG: Opening HDF5 file")
     filters = tables.Filters(complevel=5, complib='blosc')
     data_shape = tuple([0, n_channels] + list(image_shape))
     truth_shape = tuple([0, 1] + list(image_shape))
+    print("DEBUG: Writing data_storage to HDF5 file")
     data_storage = hdf5_file.create_earray(hdf5_file.root, 'data', tables.Float32Atom(), shape=data_shape,
                                            filters=filters, expectedrows=n_samples)
+
+    print("DEBUG: Writing truth_storage to HDF5 file")
     truth_storage = hdf5_file.create_earray(hdf5_file.root, 'truth', tables.UInt8Atom(), shape=truth_shape,
                                             filters=filters, expectedrows=n_samples)
+    
+    print("DEBUG: Writing affine_storage to HDF5 file")
     affine_storage = hdf5_file.create_earray(hdf5_file.root, 'affine', tables.Float32Atom(), shape=(0, 4, 4),
                                              filters=filters, expectedrows=n_samples)
     return hdf5_file, data_storage, truth_storage, affine_storage
@@ -85,13 +91,16 @@ def write_image_data_to_file(image_files, data_storage, truth_storage, image_sha
     return data_storage, truth_storage
 
 '''
-Appends data to storage lists as defined in 'create_data_file'
+####
+###FIXME
+#DO not append for big array, as it creates a copy for every file
+#Appends data to storage lists as defined in 'create_data_file'
 '''
 def add_data_to_storage(data_storage, truth_storage, affine_storage, subject_data, affine, n_channels, truth_dtype):
     data_storage.append(np.asarray(subject_data[:n_channels])[np.newaxis])
     truth_storage.append(np.asarray(subject_data[n_channels], dtype=truth_dtype)[np.newaxis][np.newaxis])
     affine_storage.append(np.asarray(affine)[np.newaxis])
-
+    print("append data to array - not memory efficient")
 
 
 # Fetches filenames
@@ -142,6 +151,7 @@ def write_data_to_file(training_data_files, out_file, image_shape, truth_dtype=n
 #    if normalize:
 #        normalize_data_storage(data_storage)
     hdf5_file.close()
+    print("DEBUG: CLOSING HDF5 file")
     return out_file
 
 
