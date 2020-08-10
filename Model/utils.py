@@ -83,7 +83,9 @@ for each subject data (mprage, tse and seg), these area added to the array creat
 '''
 def write_image_data_to_file(image_files, data_storage, truth_storage, image_shape, n_channels, affine_storage,
                              truth_dtype=np.uint8):
-    for set_of_files in image_files:
+    print(len(image_files))
+    for counter, set_of_files in enumerate(image_files):
+        print(counter, set_of_files)
         images = reslice_image_set(set_of_files, label_indices=len(set_of_files) - 1)
         subject_data = [image.get_data() for image in images]
         add_data_to_storage(data_storage, truth_storage, affine_storage, subject_data, images[0].affine, n_channels,
@@ -92,16 +94,12 @@ def write_image_data_to_file(image_files, data_storage, truth_storage, image_sha
 
 '''
 ####
-###FIXME
-#DO not append for big array, as it creates a copy for every file
 #Appends data to storage lists as defined in 'create_data_file'
 '''
 def add_data_to_storage(data_storage, truth_storage, affine_storage, subject_data, affine, n_channels, truth_dtype):
     data_storage.append(np.asarray(subject_data[:n_channels])[np.newaxis])
     truth_storage.append(np.asarray(subject_data[n_channels], dtype=truth_dtype)[np.newaxis][np.newaxis])
     affine_storage.append(np.asarray(affine)[np.newaxis])
-    print("append data to array - not memory efficient")
-
 
 # Fetches filenames
 def fetch_training_data_files(data_path, modalities):
