@@ -19,7 +19,7 @@ from Pred.post_proc_util import Connected_components, Performance_metrics
 # If you're not testing different stuff, you can just import all these configs from Model.config, model_file and labels are both loaded from config
 config['test_data_path'] = os.path.join(src_path, 'test_data_for_network')
 config["test_data_file"] = os.path.join(src_path, 'test.hdf5')
-config["test_modalities"] = ["tse", "mprage"]       
+config["test_modalities"] = ["tse", "cd "]       
 
 def main(overwrite=False):
     # convert input images into an hdf5 file
@@ -27,9 +27,16 @@ def main(overwrite=False):
     if overwrite or not os.path.exists(config["test_data_file"]):
         print('fetching data files... \n')
         training_files = fetch_training_data_files(config["test_data_path"], config["test_modalities"])
-        #print(training_files)
+        print(training_files)
         
-        test_indices = list(range(len(training_files/len(config["test_modalities"]+1))))
+        var1 = len(config["test_modalities"])+1
+        var2 = len(training_files)
+        var3 = (var2 / var1)
+        print(var1)
+        print(var2)
+        print(var3)
+        test_indices = list(range(var2))
+        
         
         print('writing data to file... \n')
         write_data_to_file(training_files, config["test_data_file"], image_shape=config["image_shape"])
