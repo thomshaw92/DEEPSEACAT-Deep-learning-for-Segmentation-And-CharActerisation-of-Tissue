@@ -16,7 +16,7 @@ from c3 import C3d
 from nipype.interfaces.utility import IdentityInterface #, Function
 from nipype.interfaces.io import SelectFiles, DataSink
 from nipype.pipeline.engine import Workflow, Node, MapNode
-from nipype.interfaces.ants import RegistrationSynQuick
+from nipype.interfaces.ants import RegistrationSynQuick, N4BiasFieldCorrection, DenoiseImage 
 
 os.environ["FSLOUTPUTTYPE"] = "NIFTI_GZ"
 
@@ -29,7 +29,7 @@ output_dir = 'ADNI_output'
 #working_dir name
 working_dir = 'Nipype'
 #other things to be set up
-side_list = ['right', 'left']
+#side_list = ['right', 'left']
 #the subject list, here called shorter list because the UMC dataset contains fewer subjects than the magdeburg dataset
 shorter_list = sorted(os.listdir(src_path+'ashs_atlas_umcutrecht/train/')) 
 #####################
@@ -46,12 +46,8 @@ infosource.iterables = [('shorter_id', shorter_list),
 
 # Different images used in this pipeline
 templates = {#tse
-             'umc_tse_native' : 'ashs_atlas_umcutrecht/train/{shorter_id}/tse_native_chunk_{side_id}.nii.gz',
-             'umc_tse_whole' : 'ashs_atlas_umcutrecht/train/{shorter_id}/tse.nii.gz',
-             #seg
-             'umc_seg_native' : 'ashs_atlas_umcutrecht/train/{shorter_id}/tse_native_chunk_{side_id}_seg.nii.gz',
-             #mprage
-             'umc_mprage_chunk' : 'ashs_atlas_umcutrecht/train/{shorter_id}/mprage_to_chunktemp_{side_id}.nii.gz',
+             't2w' : 'ashs_atlas_umcutrecht/train/{shorter_id}/tse_native_chunk_{side_id}.nii.gz',
+             't1w' : 'ashs_atlas_umcutrecht/train/{shorter_id}/tse.nii.gz',
              }
 
 # Different templates used in this pipeline
@@ -72,7 +68,7 @@ wf.connect([(infosource, selecttemplates, [('side_id','side_id')])])
 #0: N4 the T1 and T2
 #1: Register the T1w to the template (non lin)
 #2: Reverse the flow field and affine for the template chunk mask
-#3: register the T2w to the T1w 
+#3: register the T2w to the T1w #### -d 3 -a -dof 6 -m MI -n 100x100x10 \
 #4: multiply input T1w by chunk mask in subject space
 #5: interpolate TSE 
 #6: invert the warp from step 3 to bring masked chunk from step 4 into T2 space (resample as well into TSE)
@@ -87,6 +83,51 @@ wf.connect([(infosource, selecttemplates, [('side_id','side_id')])])
 ############
 ## Step 1 ##
 ############
+#N4 
+N4_T1_n = MapNode(N4BiasFieldCorrection(n4.inputs.dimension = 3, n4.inputs.bspline_fitting_distance = 300, n4.inputs.bspline_fitting_distance = 300, n4.inputs.shrink_factor = 3, n4.inputs.n_iterations = [50,50,30,20]),
+                  name='N4_T1_n', iterfield=['in_file'])
+N4_T2_n = MapNode(N4BiasFieldCorrection(n4.inputs.dimension = 3, n4.inputs.bspline_fitting_distance = 300, n4.inputs.bspline_fitting_distance = 300, n4.inputs.shrink_factor = 3, n4.inputs.n_iterations = [50,50,30,20]),
+                  name='N4_T1_n', iterfield=['in_file'])
+
+wf.connect([(selectfiles, N4_t1_n, [('t1w','in_file')])])
+wf.connect([(selectfiles, N4_t2_n, [('t2w','in_file')])])
+
+##output_image
+#############
+## Step 2 ##
+#############
+#register the T1w to the template 
+register_T1w_to_template_n = MapNode(RegistrationSynQuick(transform_type = 's', ),
+                                name='register_T1w_to_template_n', iterfield=['fixed_image', 'moving_image'])
+wf.connect([(N4_t1_n, register_T2w_to_T1w_n, [('output_image', 'fixed_image')])])
+
+#############
+## Step 4 ##
+#############
+#register the t2w to the t1w
+register_T2w_to_T1w_n = MapNode(RegistrationSynQuick(transform_type = 's', ),
+                     	name='register_T2w_to_T1w_n', iterfield=['fixed_image', 'moving_image'])
+
+wf.connect([(N4_t1_n, register_T2w_to_T1w_n, [('output_image', 'fixed_image')])])
+wf.connect([(N4_t2_n, register_T2w_to_T1w_n, [('output_image', 'moving_image')])])
+
+
+#forward_warp_field (a pathlike object or string representing an existing file) – Forward warp field.
+
+#inverse_warp_field (a pathlike object or string representing an existing file) – Inverse warp field.
+
+#inverse_warped_image (a pathlike object or string representing an existing file) – Inverse warped image.
+
+#out_matrix (a pathlike object or string representing an existing file) – Affine matrix.
+
+#warped_image (a pathlike object or string representing an existing file) – Warped image.
+
+
+
+
+################ end 
+
+
 #Pad and trim the tse_native_chunk to the correct size 
 UMC_trim_pad_TSE_n = MapNode(C3d(interp = "Sinc", pix_type = 'float', args = '-trim-to-size 176x144x128vox -pad-to 176x144x128 0' , out_files = 'UMC_TSE_trim_pad.nii.gz'), 
                             name='UMC_trim_pad_TSE_n', iterfield=['in_file']) 
@@ -94,9 +135,10 @@ UMC_trim_pad_TSE_n = MapNode(C3d(interp = "Sinc", pix_type = 'float', args = '-t
 wf.connect([(selectfiles, UMC_trim_pad_TSE_n, [('umc_tse_native','in_file')])])
 
 
-#############
-## Step 2 ##
-#############
+
+
+### denoise 
+
 #Reslice the trimmed and padded image by the original TSE to get new same sized chunks across the dataset.
 UMC_reslice_TSE_n =  MapNode(C3d(interp = "Sinc", pix_type = 'float', args = '-reslice-identity', out_files = 'UMC_TSE_native_resliced.nii.gz'),
                              name='UMC_reslice_TSE_n', iterfield =['in_file', 'opt_in_file'])
