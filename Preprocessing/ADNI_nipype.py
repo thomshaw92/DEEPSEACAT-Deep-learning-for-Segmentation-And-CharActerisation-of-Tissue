@@ -16,13 +16,13 @@ from c3 import C3d
 from nipype.interfaces.utility import IdentityInterface #, Function
 from nipype.interfaces.io import SelectFiles, DataSink
 from nipype.pipeline.engine import Workflow, Node, MapNode
-from nipype.interfaces.ants import RegistrationSynQuick, N4BiasFieldCorrection, DenoiseImage 
+from nipype.interfaces.ants import RegistrationSynQuick, N4BiasFieldCorrection, DenoiseImage, ApplyTransforms 
 
 os.environ["FSLOUTPUTTYPE"] = "NIFTI_GZ"
 
 #where all the atlases live
 src_path = '/data/lfs2/uqtshaw/DEEPSEACAT/'
-atlas_dir = os.path.join(os.getcwd(),'DEEPSEACAT_atlas')
+atlas_dir = os.path.join(os.getcwd(),'ADNI_atlas')
 ##############
 #the outdir
 output_dir = 'ADNI_output'
@@ -31,7 +31,7 @@ working_dir = 'Nipype'
 #other things to be set up
 #side_list = ['right', 'left']
 #the subject list, here called shorter list because the UMC dataset contains fewer subjects than the magdeburg dataset
-shorter_list = sorted(os.listdir(src_path+'ashs_atlas_umcutrecht/train/')) 
+shorter_list = sorted(os.listdir(src_path+'bids_pruned_20200928/sub*')) 
 #####################
 
 wf = Workflow(name='ADNI_workflow') 
@@ -46,13 +46,14 @@ infosource.iterables = [('shorter_id', shorter_list),
 
 # Different images used in this pipeline
 templates = {#tse
-             't2w' : 'ashs_atlas_umcutrecht/train/{shorter_id}/tse_native_chunk_{side_id}.nii.gz',
-             't1w' : 'ashs_atlas_umcutrecht/train/{shorter_id}/tse.nii.gz',
+             't1w' : 'bids_pruned_20200928/{shorter_id}/ses-01/anat/*run-1_T1w.nii.gz',
+             't2w' : 'bids_pruned_20200928/{shorter_id}/ses-01/anat/*run-1_T2w.nii.gz',
              }
 
 # Different templates used in this pipeline
-bespoke_files = {'mprage_inthist_template' : '{side_id}_mprage_template_resampled-0.35mmIso_rescaled_0meanUv_pad-176x144x128.nii.gz',
-                 'tse_inthist_template' : '{side_id}_tse_template_resampled-0.35mmIso_rescaled_0meanUv_pad-176x144x128.nii.gz'
+bespoke_files = {'mprage_adni_template' : 'correct_spacing_t1w_adni_atlas_ashs_space.nii.gz',
+                 #'tse_adni_template' : '{side_id}_tse_template_resampled-0.35mmIso_rescaled_0meanUv_pad-176x144x128.nii.gz',
+                 'mprage_template_bin_chunk_{side_id}' : 'refspace_{side_id}_0.5mm_112x144x124_bin.nii.gz' ##this may be in the wrong space? 
                  }
 
 selectfiles = Node(SelectFiles(templates, base_directory=src_path), name='selectfiles')
@@ -81,7 +82,7 @@ wf.connect([(infosource, selecttemplates, [('side_id','side_id')])])
 
 
 ############
-## Step 1 ##
+## Step 0 ##
 ############
 #N4 
 N4_T1_n = MapNode(N4BiasFieldCorrection(n4.inputs.dimension = 3, n4.inputs.bspline_fitting_distance = 300, n4.inputs.bspline_fitting_distance = 300, n4.inputs.shrink_factor = 3, n4.inputs.n_iterations = [50,50,30,20]),
@@ -94,15 +95,38 @@ wf.connect([(selectfiles, N4_t2_n, [('t2w','in_file')])])
 
 ##output_image
 #############
-## Step 2 ##
+## Step 1 ##
 #############
-#register the T1w to the template 
-register_T1w_to_template_n = MapNode(RegistrationSynQuick(transform_type = 's', ),
+#register the T1w to the template.
+register_T1w_to_template_n = MapNode(RegistrationSynQuick(transform_type = 's'),
                                 name='register_T1w_to_template_n', iterfield=['fixed_image', 'moving_image'])
-wf.connect([(N4_t1_n, register_T2w_to_T1w_n, [('output_image', 'fixed_image')])])
+wf.connect([(N4_t1_n, register_T1w_to_template_n, [('output_image', 'moving_image')])])
+wf.connect([(selecttemplates, register_T1w_to_template_n, [('mprage_adni_template', 'fixed_image')])])
 
 #############
-## Step 4 ##
+## Step 2 ##
+#############
+#Reverse the flow field and affine for the template chunk mask to the input T1w 
+
+invert_chunk_to_T1w_n = MapNode(ApplyTransforms(interpolation = 'NearestNeighbor', ),
+                                name='invert_chunk_to_T1w_n', iterfield=['input_image', 'reference_image'])
+wf.connect([(register_T1w_to_template_n, invert_chunk_to_T1w_n, [('output_image', 'moving_image', 'transforms')])])
+wf.connect([(selecttemplates, invert_chunk_to_T1w_n, [('mprage_adni_template_chunk_{side_id}', 'moving_image')])])
+wf.connect([(register_T1w_to_template_n, invert_chunk_to_T1w_n, [('out_matrix' 'transforms')])])
+
+at = ApplyTransforms()
+at.inputs.dimension = 3
+at.inputs.input_image = 'moving1.nii'
+at.inputs.reference_image = 'fixed1.nii'
+at.inputs.output_image = 'deformed_moving1.nii'
+at.inputs.interpolation = 'Linear'
+at.inputs.default_value = 0
+at.inputs.transforms = ['ants_Warp.nii.gz', 'trans.mat']
+at.inputs.invert_transform_flags = [False, True]
+
+
+#############
+## Step 3 ##
 #############
 #register the t2w to the t1w
 register_T2w_to_T1w_n = MapNode(RegistrationSynQuick(transform_type = 's', ),
@@ -121,6 +145,10 @@ wf.connect([(N4_t2_n, register_T2w_to_T1w_n, [('output_image', 'moving_image')])
 #out_matrix (a pathlike object or string representing an existing file) – Affine matrix.
 
 #warped_image (a pathlike object or string representing an existing file) – Warped image.
+
+#############
+## Step 4 ##
+#############
 
 
 
