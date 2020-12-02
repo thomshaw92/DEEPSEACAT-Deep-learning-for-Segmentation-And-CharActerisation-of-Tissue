@@ -1,0 +1,13 @@
+#!/bin/bash
+#PBS -N pp_pbs_script
+
+#PBS -A UQ-CAI
+
+#PBS -l select=1:ncpus=12:mem=62GB:vmem=62GB,walltime=16:00:00
+
+#PBS -V
+
+#Now do some things
+
+source ~/.bashrc
+~/scripts/DEEPSEACAT-Deep-learning-for-Segmentation-And-CharActerisation-of-Tissue/Preprocessing/preprocess_ADNI.sh $SUBJNAME $TMPDIR
