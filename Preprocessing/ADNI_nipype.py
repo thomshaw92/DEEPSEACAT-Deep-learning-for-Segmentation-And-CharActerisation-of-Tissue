@@ -88,7 +88,7 @@ wf.connect([(infosource, selecttemplates, [('side_id','side_id')])])
 N4_T1_n = MapNode(N4BiasFieldCorrection(n4.inputs.dimension = 3, n4.inputs.bspline_fitting_distance = 300, n4.inputs.bspline_fitting_distance = 300, n4.inputs.shrink_factor = 3, n4.inputs.n_iterations = [50,50,30,20]),
                   name='N4_T1_n', iterfield=['in_file'])
 N4_T2_n = MapNode(N4BiasFieldCorrection(n4.inputs.dimension = 3, n4.inputs.bspline_fitting_distance = 300, n4.inputs.bspline_fitting_distance = 300, n4.inputs.shrink_factor = 3, n4.inputs.n_iterations = [50,50,30,20]),
-                  name='N4_T1_n', iterfield=['in_file'])
+                  name='N4_T2_n', iterfield=['in_file'])
 
 wf.connect([(selectfiles, N4_t1_n, [('t1w','in_file')])])
 wf.connect([(selectfiles, N4_t2_n, [('t2w','in_file')])])
@@ -108,11 +108,26 @@ wf.connect([(selecttemplates, register_T1w_to_template_n, [('mprage_adni_templat
 #############
 #Reverse the flow field and affine for the template chunk mask to the input T1w 
 
+join_transforms_n = JoinNode()
+
+
 invert_chunk_to_T1w_n = MapNode(ApplyTransforms(interpolation = 'NearestNeighbor', ),
                                 name='invert_chunk_to_T1w_n', iterfield=['input_image', 'reference_image'])
+
+
 wf.connect([(register_T1w_to_template_n, invert_chunk_to_T1w_n, [('output_image', 'moving_image', 'transforms')])])
+
 wf.connect([(selecttemplates, invert_chunk_to_T1w_n, [('mprage_adni_template_chunk_{side_id}', 'moving_image')])])
+
+
+wf.connect([(register_T1w_to_template_n, invert_chunk_to_T1w_n, [('forward_warp_field' 'transforms')])]) ##try it with brackets to try and get the 
 wf.connect([(register_T1w_to_template_n, invert_chunk_to_T1w_n, [('out_matrix' 'transforms')])])
+
+
+
+
+
+
 
 at = ApplyTransforms()
 at.inputs.dimension = 3

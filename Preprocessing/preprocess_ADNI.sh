@@ -17,7 +17,8 @@
 #12: Datasink
 
 #Thomas Shaw 02/12/20
-subjName=$1
+#subjName=$1
+subjName=sub-002S1261
 source ~/.bashrc
 export ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=12
 export NSLOTS=12
@@ -28,6 +29,9 @@ data_dir=/30days/${USER}/ADNI/
 for ss in ses-01 ses-02 ses-03; do
     if [[ -d ${raw_data_dir}/${subjName}/${ss} ]]; then
         rsync -rv $raw_data_dir/${subjName}/${ss}/anat $TMPDIR
+        if [[ -d ${data_dir}/${subjName} ]] ; then
+            rsync -rv ${data_dir}/${subjName} $TMPDIR
+        fi
         mkdir -p $TMPDIR/$subjName
         chmod 744 $TMPDIR -R
         mv $TMPDIR/anat/${subjName}_${ss}_*_run-1_T2w.nii.gz $TMPDIR/$subjName/${subjName}_${ss}_acq-tsehippoTraToLongaxis_run-1_T2w.nii.gz
@@ -76,7 +80,7 @@ for ss in ses-01 ses-02 ses-03; do
             rm $TMPDIR/$subjName/${subjName}_${ss}_T1w_N4corrected_preproc.nii.gz
         fi
         #make another loop for nlin bit.
-        if [[ ! -e ${data_dir}/${subjName}/${subjName}_${ss}_T2w_NlinMoCo_res-iso.3_N4corrected_denoised_brain_preproc.nii.gz ]]; then
+        if [[ ! -e ${data_dir}/${subjName}/${subjName}_${ss}_T2w_run-1_res-iso.5_N4corrected_norm_brain_preproc.nii.gz ]]; then
             ######TSE#####
             #apply mask to tse - resample like tse - this is just for BC
             if [[ ! -e ${data_dir}/${subjName}/${subjName}_${ss}_T2w_run-1_brainmask.nii.gz ]]; then
@@ -91,24 +95,40 @@ for ss in ses-01 ses-02 ses-03; do
                 $singularity N4BiasFieldCorrection -d 3 -b [1x1x1,3] -c '[50x50x40x30,0.00000001]' -i ${simg_input_dir}/${subjName}_${ss}_acq-tsehippoTraToLongaxis_run-${x}_T2w.nii.gz -x ${simg_input_dir}/${subjName}_${ss}_T2w_run-${x}_brainmask.nii.gz -r 1 -o ${simg_input_dir}/${subjName}_${ss}_T2w_run-${x}_N4corrected_preproc.nii.gz --verbose 1 -s 2
                 if [[ ! -e $TMPDIR/$subjName/${subjName}_${ss}_T2w_run-${x}_N4corrected_preproc.nii.gz ]]; then
                     echo "TSE run ${x} did not bias correct for ${subjName}_${ss}, trying without mask " >>${data_dir}/preprocessing_error_log.txt
-                    $singularity N4BiasFieldCorrection -d 3 -b [1x1x1,3] -c '[50x50x40x30,0.00000001]' -i ${simg_input_dir}/${subjName}_${ss}_acq-tsehippoTraToLongaxis_run-${x}_T2w.nii.gz -r 1 -o ${simg_input_dir}/${subjName}_${ss}_T2w_run-${x}_N4corrected_preproc.nii.gz --verbose 1 -s 2
+                    $singularity N4BiasFieldCorrection -d 3 \
+                    -b [1x1x1,3] \
+                    -c '[50x50x40x30,0.00000001]' \
+                    -i ${simg_input_dir}/${subjName}_${ss}_acq-tsehippoTraToLongaxis_run-${x}_T2w.nii.gz \
+                    -r 1 -o ${simg_input_dir}/${subjName}_${ss}_T2w_run-${x}_N4corrected_preproc.nii.gz \
+                    --verbose 1 \
+                    -s 2
                 fi
-                #normalise intensities of the BC'd tses
+                #normalise intensities of the BC'd tses 
                 $singularity ImageMath 3 ${simg_input_dir}/${subjName}_${ss}_T2w_run-${x}_N4corrected_norm_preproc.nii.gz RescaleImage ${simg_input_dir}/${subjName}_${ss}_T2w_run-${x}_N4corrected_preproc.nii.gz 0 1000
-                
-                #interpolation of TSEs -bring all into the same space while minimising interpolation write steps.
+                #cp $TMPDIR/$subjName/${subjName}_${ss}_T2w_run-${x}_N4corrected_preproc.nii.gz $TMPDIR/$subjName/${subjName}_${ss}_T2w_run-${x}_N4corrected_norm_preproc.nii.gz
+                #interpolation of TSEs -bring all into the same space while minimising interpolation write steps. ##REMOVING ###REMOVING THESE STEPS TO MINIMISE SMOOTHING
                 echo "running interpolation"
-                $singularity flirt -v -applyisoxfm 0.5 -interp sinc -sincwidth 8 -in ${simg_input_dir}/${subjName}_${ss}_T2w_run-${x}_N4corrected_norm_preproc.nii.gz -ref ${simg_input_dir}/${subjName}_${ss}_T2w_run-${x}_N4corrected_norm_preproc.nii.gz -out ${simg_input_dir}/${subjName}_${ss}_T2w_run-${x}_res-iso.3_N4corrected_norm_preproc.nii.gz
+                cp $TMPDIR/$subjName/${subjName}_${ss}_T2w_run-${x}_N4corrected_norm_preproc.nii.gz $TMPDIR/$subjName/${subjName}_${ss}_T2w_run-${x}_res-iso.5_N4corrected_norm_preproc.nii.gz
+                #$singularity flirt -v -applyisoxfm 0.5 \
+                #-interp sinc \
+                #-sincwidth 8 \
+                #-in ${simg_input_dir}/${subjName}_${ss}_T2w_run-${x}_N4corrected_norm_preproc.nii.gz \
+                #-ref ${simg_input_dir}/${subjName}_${ss}_T2w_run-${x}_N4corrected_norm_preproc.nii.gz \
+                #-out ${simg_input_dir}/${subjName}_${ss}_T2w_run-${x}_res-iso.5_N4corrected_norm_preproc.nii.gz
                 
                 #create new brainmask and brain images.
                 echo "running ants apply transforms to create new brainmask of TSE ${x}"
-                $singularity antsApplyTransforms -d 3 -i ${simg_input_dir}/${subjName}_${ss}_T1w_brainmask.nii.gz -r ${simg_input_dir}/${subjName}_${ss}_T2w_run-${x}_res-iso.3_N4corrected_norm_preproc.nii.gz -n NearestNeighbor -o ${simg_input_dir}/${subjName}_${ss}_T2w_run-${x}_brainmask.nii.gz
+                $singularity antsApplyTransforms -d 3 \
+                -i ${simg_input_dir}/${subjName}_${ss}_T1w_brainmask.nii.gz \
+                -r ${simg_input_dir}/${subjName}_${ss}_T2w_run-${x}_res-iso.5_N4corrected_norm_preproc.nii.gz \
+                -n NearestNeighbor \
+                -o ${simg_input_dir}/${subjName}_${ss}_T2w_run-${x}_brainmask.nii.gz
                 rm $TMPDIR/$subjName/${subjName}_${ss}_T2w_run-${x}_N4corrected_norm_preproc.nii.gz
                 
                 #mask the preprocessed TSE.
                 echo "masking the pp'd TSE ${x}"
-                $singularity ImageMath 3 ${simg_input_dir}/${subjName}_${ss}_T2w_run-${x}_res-iso.3_N4corrected_norm_brain_preproc.nii.gz m ${simg_input_dir}/${subjName}_${ss}_T2w_run-${x}_res-iso.3_N4corrected_norm_preproc.nii.gz ${simg_input_dir}/${subjName}_${ss}_T2w_run-${x}_brainmask.nii.gz
-                if [[ ! -e $TMPDIR/$subjName/${subjName}_${ss}_T2w_run-${x}_res-iso.3_N4corrected_norm_brain_preproc.nii.gz ]]; then
+                $singularity ImageMath 3 ${simg_input_dir}/${subjName}_${ss}_T2w_run-${x}_res-iso.5_N4corrected_norm_brain_preproc.nii.gz m ${simg_input_dir}/${subjName}_${ss}_T2w_run-${x}_res-iso.5_N4corrected_norm_preproc.nii.gz ${simg_input_dir}/${subjName}_${ss}_T2w_run-${x}_brainmask.nii.gz
+                if [[ ! -e $TMPDIR/$subjName/${subjName}_${ss}_T2w_run-${x}_res-iso.5_N4corrected_norm_brain_preproc.nii.gz ]]; then
                     echo "${subjName}_${ss} TSE ${x} failed preprocessing" >>${data_dir}/preprocessing_error_log.txt
                 fi
                 # rm brainmasks and other crap
@@ -126,14 +146,15 @@ for ss in ses-01 ses-02 ses-03; do
         #copy the files over
         cp -r /30days/uqtshaw/ADNI_atlas $TMPDIR/$subjName/
         #0: register the T2w to the T1w
-        $singularity antsRegistrationSyNQuick.sh -d 3 \
-        -f ${simg_input_dir}/${subjName}_${ss}_T1w_N4corrected_norm_preproc.nii.gz \
-        -m ${simg_input_dir}/${subjName}_${ss}_T2w_run-1_res-iso.3_N4corrected_norm_preproc.nii.gz \
-        -t a \
-        -o ${simg_input_dir}/${subjName}_${ss}_T2w_run-1_res-iso.3_N4corrected_norm_preproc_to_T1w_
+        if [[ ! -e ${TMPDIR}/${subjName}_${ss}_T2w_run-1_res-iso.5_N4corrected_norm_preproc_to_T1w_Warped.nii.gz ]] ; then
+            $singularity antsRegistrationSyNQuick.sh -d 3 \
+            -f ${simg_input_dir}/${subjName}_${ss}_T1w_N4corrected_norm_preproc.nii.gz \
+            -m ${simg_input_dir}/${subjName}_${ss}_T2w_run-1_res-iso.5_N4corrected_norm_preproc.nii.gz \
+            -t a \
+            -o ${simg_input_dir}/${subjName}_${ss}_T2w_run-1_res-iso.5_N4corrected_norm_preproc_to_T1w_
+        fi
         #1: Register the T1w to the template (non lin)
-        if [[ ! -e $TMPDIR/$subjName/${subjName}_${ss}_T1w_N4corrected_norm_preproc_to_template_Warped.nii.gz ]] ; then
-            
+        if [[ ! -e ${TMPDIR}/$subjName/${subjName}_${ss}_T1w_N4corrected_norm_preproc_to_template_Warped.nii.gz ]] ; then
             $singularity antsRegistrationSyNQuick.sh -d 3 \
             -f ${simg_input_dir}/ADNI_atlas/correct_spacing_t1w_adni_atlas_ashs_space.nii.gz \
             -m ${simg_input_dir}/${subjName}_${ss}_T1w_N4corrected_norm_preproc.nii.gz \
@@ -144,15 +165,15 @@ for ss in ses-01 ses-02 ses-03; do
             if [[ ! -e $TMPDIR/$subjName/${subjName}_${ss}_T1w_${side}_chunk_inversed.nii.gz ]] ; then
                 $singularity antsApplyTransforms -d 3 \
                 -i ${simg_input_dir}/${subjName}_${ss}_T1w_N4corrected_norm_preproc_to_template_Warped.nii.gz \
-                -r ${simg_input_dir}/ADNI_atlas/refspace_${side}_0.5mm_112x144x124_bin.nii.gz
+                -r ${simg_input_dir}/ADNI_atlas/refspace_${side}_0.5mm_112x144x124_bin.nii.gz \
                 -n LanczosWindowedSinc \
                 -o ${simg_input_dir}/${subjName}_${ss}_T1w_N4corrected_norm_preproc_to_template_chunk_${side}.nii.gz
                 #T2w
                 $singularity antsApplyTransforms -d 3 \
-                -i ${simg_input_dir}/${subjName}_${ss}_T2w_run-1_res-iso.3_N4corrected_norm_preproc_to_T1w_Warped.nii.gz \
-                -r ${simg_input_dir}/ADNI_atlas/refspace_${side}_0.5mm_112x144x124_bin.nii.gz
+                -i ${simg_input_dir}/${subjName}_${ss}_T2w_run-1_res-iso.5_N4corrected_norm_preproc_to_T1w_Warped.nii.gz \
+                -r ${simg_input_dir}/ADNI_atlas/refspace_${side}_0.5mm_112x144x124_bin.nii.gz \
                 -n LanczosWindowedSinc \
-                -o ${simg_input_dir}/${subjName}_${ss}_T2w_run-1_res-iso.3_N4corrected_norm_preproc_to_template_chunk_${side}.nii.gz \
+                -o ${simg_input_dir}/${subjName}_${ss}_T2w_run-1_res-iso.5_N4corrected_norm_preproc_to_template_chunk_${side}.nii.gz \
                 -t ${simg_input_dir}/${subjName}_${ss}_T1w_N4corrected_norm_preproc_to_template_1Warp.nii.gz \
                 -t ${simg_input_dir}/${subjName}_${ss}_T1w_N4corrected_norm_preproc_to_template_0GenericAffine.mat
                 
@@ -165,9 +186,10 @@ for ss in ses-01 ses-02 ses-03; do
         #11: Normalise TSE and MPRAGE chunks respective to the templates - for francesco
         #move back out of TMPDIR... need to delete all the crap (from RDS - the raw files are still included, need to sort this)
         chmod -R 740 $TMPDIR/
+        rm ${data_dir}/${subjName}/*-mp2rage-UNIDEN_run-1_T1w.nii.gz ${data_dir}/${subjName}/*Warp.nii.gz ${data_dir}/${subjName}/*InverseWarped.nii.gz ${data_dir}/${subjName}/*tsehippoTraToLongaxis_run-1_T2w.nii.gz 
+        rm -r ${data_dir}/${subjName}/ADNI_atlas
         #mkdir /RDS/Q0535/data/$subjName
         rsync -rcv $TMPDIR/${subjName} ${data_dir}/
-        echo "done PP for $subjName_${ss}"
-        
+        echo "done PP for $subjName_${ss}"      
     fi
 done

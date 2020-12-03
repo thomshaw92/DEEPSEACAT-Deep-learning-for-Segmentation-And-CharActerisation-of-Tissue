@@ -3,7 +3,7 @@
 
 #PBS -A UQ-CAI
 
-#PBS -l select=1:ncpus=12:mem=62GB:vmem=62GB,walltime=16:00:00
+#PBS -l select=1:ncpus=12:mem=24GB:vmem=24GB,walltime=8:00:00
 
 #PBS -V
 
