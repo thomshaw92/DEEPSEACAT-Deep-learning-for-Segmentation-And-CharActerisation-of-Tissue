@@ -17,8 +17,7 @@
 #12: Datasink
 
 #Thomas Shaw 02/12/20
-#subjName=$1
-subjName=sub-002S1261
+subjName=$1
 source ~/.bashrc
 export ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=12
 export NSLOTS=12
@@ -186,10 +185,9 @@ for ss in ses-01 ses-02 ses-03; do
         #11: Normalise TSE and MPRAGE chunks respective to the templates - for francesco
         #move back out of TMPDIR... need to delete all the crap (from RDS - the raw files are still included, need to sort this)
         chmod -R 740 $TMPDIR/
-        rm ${data_dir}/${subjName}/*-mp2rage-UNIDEN_run-1_T1w.nii.gz ${data_dir}/${subjName}/*Warp.nii.gz ${data_dir}/${subjName}/*InverseWarped.nii.gz ${data_dir}/${subjName}/*tsehippoTraToLongaxis_run-1_T2w.nii.gz 
-        rm -r ${data_dir}/${subjName}/ADNI_atlas
-        #mkdir /RDS/Q0535/data/$subjName
         rsync -rcv $TMPDIR/${subjName} ${data_dir}/
+	rm ${data_dir}/${subjName}/*-mp2rage-UNIDEN_run-1_T1w.nii.gz ${data_dir}/${subjName}/*Warp.nii.gz ${data_dir}/${subjName}/*InverseWarped.nii.gz ${data_dir}/${subjName}/*tsehippoTraToLongaxis_run-1_T2w.nii.gz
+        rm -r ${data_dir}/${subjName}/ADNI_atlas
         echo "done PP for $subjName_${ss}"      
     fi
 done
